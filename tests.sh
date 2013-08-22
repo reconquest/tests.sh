@@ -72,7 +72,7 @@ tests_assert_re() {
     if [ $result -gt 0 ]; then
         touch "$TEST_ID/_failed"
         tests_debug "expectation failed: regexp does not match"
-        tests_debug ">>> $expected$"
+        tests_debug ">>> $regexp$"
         tests_debug "<<< $actual$"
     fi
 
