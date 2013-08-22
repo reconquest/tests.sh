@@ -250,8 +250,11 @@ tests_run_all() {
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
             TEST_ASSERTS=0
+            local pwd="$(pwd)"
             tests_run_one "$file" > $stdout 2>&1
-            if [ $? -eq 0 ]; then
+            local result=$?
+            cd "$pwd"
+            if [ $result -eq 0 ]; then
                 echo -n .
                 success=$((success+1))
                 rm -f $stdout
