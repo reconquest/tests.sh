@@ -7,7 +7,7 @@ TEST_ID=""
 # Verbosity level
 TEST_VERBOSE=0
 
-# Assertations counter
+# Assertions counter
 TEST_ASSERTS=0
 
 # Last stdout
@@ -48,7 +48,7 @@ tests_assert_equals() {
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
 }
 
-# Function tests_assert_stdout compare last evaluated command stdout
+# Function tests_assert_stdout compares last evaluated command stdout
 # to given string.
 # Args:
 #   $1: expected stdout
@@ -62,7 +62,7 @@ tests_assert_stdout() {
 # Function tests_assert_re checks that last evaluated command output
 # (stdout or stderr) matches regexp.
 # Args:
-#   $1: stdout|stderr|file
+#   $1: stdout|stderr|<filename>
 #   $2: regexp
 tests_assert_re() {
     local target="$1"
@@ -209,9 +209,10 @@ tests_debug() {
 tests_do() {
     tests_debug "$ ${@}"
 
-    echo >$TEST_STDOUT
-    echo >$TEST_STDERR
-    echo >$TEST_EXITCODE
+    # reset stdout/stderr/exitcode
+    >$TEST_STDOUT
+    >$TEST_STDERR
+    >$TEST_EXITCODE
 
     {
         if [ $TEST_VERBOSE -lt 2 ]; then
@@ -219,15 +220,14 @@ tests_do() {
         fi
 
         if [ $TEST_VERBOSE -lt 3 ]; then
-            tests_eval "${@}" > /dev/null
             tests_eval "${@}" \
-                2> >(tee $TEST_STDERR 1>&2) \
+                2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT > /dev/null)
         fi
 
         if [ $TEST_VERBOSE -ge 4 ]; then
             tests_eval "${@}" \
-                2> >(tee $TEST_STDERR 1>&2) \
+                2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT)
         fi
 
@@ -314,6 +314,8 @@ tests_run_all() {
         total_assertions_cnt=$(($total_assertions_cnt+$TEST_ASSERTS))
     done
 
+    tests_rm_last
+
     echo
     echo
     echo ---
@@ -345,6 +347,10 @@ tests_get_last() {
 tests_set_last() {
     local testcase=$1
     echo "$testcase" > .last-testcase
+}
+
+tests_rm_last() {
+    rm -f .last-testcase
 }
 
 tests_verbose() {
