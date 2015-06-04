@@ -42,7 +42,7 @@ tests_assert_equals() {
         tests_debug "expectation failed: two strings not equals"
         tests_debug ">>> $expected$"
         tests_debug "<<< $actual$"
-        return 1
+        tests_interrupt
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -85,6 +85,7 @@ tests_assert_re() {
         tests_debug "expectation failed: regexp does not match"
         tests_debug ">>> ${regexp:-<empty regexp>}"
         tests_debug "<<< ${target}"
+        tests_interrupt
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -123,6 +124,7 @@ tests_diff() {
         touch "$TEST_ID/_failed"
         tests_debug "diff failed: "
         tests_ident < "$diff"
+        tests_interrupt
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -165,6 +167,7 @@ tests_assert_exitcode() {
         touch "$TEST_ID/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
+        tests_interrupt
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -328,7 +331,9 @@ tests_run_one() {
     tests_debug "TESTCASE $(readlink -f $file)"
 
     tests_init
-    source "$file"
+    (
+        source "$file"
+    )
     tests_cleanup
 
     if [ $? -gt 0 ]; then
@@ -376,4 +381,8 @@ tests_cleanup() {
     rm -rf "$TEST_ID"
 
     return $success
+}
+
+tests_interrupt() {
+    exit 88
 }
