@@ -1,5 +1,21 @@
 #!/bin/bash
 
+
+# Current test session
+TEST_ID=""
+
+# Verbosity level
+TEST_VERBOSE=0
+
+# Assertions counter
+TEST_ASSERTS=0
+
+# Last stdout
+TEST_STDOUT=
+
+# Last stderr
+TEST_STDERR=
+
 # Public API Functions {{{
 
 # Function tests_tmpdir returns temporary directory for current test session.
@@ -32,65 +48,90 @@ tests_assert_equals() {
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
 }
 
-# Function tests_assert_stdout evaluates given command and compare it's stdout
+# Function tests_assert_stdout compares last evaluated command stdout
 # to given string.
 # Args:
 #   $1: expected stdout
-#   ${@}: command to evaluate
 tests_assert_stdout() {
     local expected="$1"
     shift
 
-    tests_assert_stdout_re "$(tests_quote_re "$expected")" "${@}"
+    tests_assert_stdout_re "$(tests_quote_re "$expected")"
 }
 
-# Function tests_assert_re evaluates command and checks that it's output
+# Function tests_assert_re checks that last evaluated command output
 # (stdout or stderr) matches regexp.
 # Args:
-#   $1: stdout|stderr
+#   $1: stdout|stderr|<filename>
 #   $2: regexp
-#   ${@}: command to evaluate
 tests_assert_re() {
     local target="$1"
     local regexp="$2"
     shift 2
 
-    local stdout=`mktemp --tmpdir=$TEST_ID stdout.XXXX`
-    local stderr=`mktemp --tmpdir=$TEST_ID stderr.XXXX`
-
-    tests_debug "? ${@}"
-    tests_eval "${@}" > $stdout 2> $stderr
-
-    if [ "$target" = "stdout" ]; then
-        target=$stdout
+    if [ -f $target ]; then
+        file=$target
+    elif [ "$target" = "stdout" ]; then
+        file=$TEST_STDOUT
     else
-        target=$stderr
+        file=$TEST_STDERR
     fi
 
-    grep -qP "$regexp" $target
+    grep -qP "$regexp" $file
     local result=$?
+
     if [ $result -gt 0 ]; then
         touch "$TEST_ID/_failed"
         tests_debug "expectation failed: regexp does not match"
-        tests_debug ">>> $regexp$"
-        tests_debug "<<< $actual$"
-    fi
-
-    if [ $result -gt 0 -o $TEST_VERBOSE -ge 5 ]; then
-        tests_debug "command stdout:"
-        tests_indent < $stdout
-        tests_debug "command stderr:"
-        tests_indent < $stderr
+        tests_debug ">>> ${regexp:-<empty regexp>}"
+        tests_debug "<<< ${target}"
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
 }
 
-# Function tests_assert_stdout_re evaluates given command and checks, that
-# it's stdout matches given regexp.
+# Function tests_diff checks diff of last evaluated command output (stdout or
+# stder) or file with given file or content.
+# Args:
+#   $1: string|file (expected)
+#   $2: stdout|stderr|string|file (actual)
+tests_diff() {
+    local expected_target="$1"
+    local actual_target="$2"
+    shift 2
+
+    if [ -f $expected_target ]; then
+        expected_file=$expected_target
+    else
+        expected_file=<(echo "$expected_target")
+    fi
+
+    if [ -f $actual_target ]; then
+        actual_file=$actual_target
+    elif [ "$actual_target" = "stdout" ]; then
+        actual_file=$TEST_STDOUT
+    elif [ "$actual_target" = "stderr" ]; then
+        actual_file=$TEST_STDOUT
+    else
+        actual_file=<(echo "$actual_target")
+    fi
+
+    local diff=$(diff -u $expected_file $actual_file)
+    local result=$?
+
+    if [ $result -gt 0 ]; then
+        touch "$TEST_ID/_failed"
+        tests_debug "diff failed: "
+        tests_ident < "$diff"
+    fi
+
+    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+}
+
+# Function tests_assert_stdout_re checks that stdout of last evaluated command
+# matches given regexp.
 # Args:
 #   $1: regexp
-#   ${@}: command to evaluate
 tests_assert_stdout_re() {
     tests_assert_re stdout "${@}"
 }
@@ -99,46 +140,31 @@ tests_assert_stdout_re() {
 # stderr used instead of stdout.
 # Args:
 #   $1: regexp
-#   ${@}: command to evaluate
 tests_assert_stderr_re() {
     tests_assert_re stderr "${@}"
 }
 
-# Function tests_assert_success evaluates command and checks that it's exit
-# code is zero.
+# Function tests_assert_success checks that last evaluated command exit status
+# is zero.
 # Args:
 #   ${@}: command to evaluate
 tests_assert_success() {
-    tests_assert_exitcode 0 "${@}"
+    tests_assert_exitcode 0
 }
 
-# Function tests_assert_exitcode evaluates command and chacks it's exit code to
+# Function tests_assert_exitcode chacks exit code of last evaluated command to
 # specified value.
 # Args:
 #   $1: expected exit code
-#   ${@}: command to evaluate
 tests_assert_exitcode() {
     local code=$1
     shift
 
-    local stdout=`mktemp --tmpdir=$TEST_ID stdout.XXXX`
-    local stderr=`mktemp --tmpdir=$TEST_ID stderr.XXXX`
-
-    tests_debug "? $(tests_quote_cmd "${@}")"
-    tests_eval "${@}" > $stdout 2> $stderr
-
-    local result=$?
+    local result=$(cat $TEST_EXITCODE)
     if [ $result -ne $code ]; then
         touch "$TEST_ID/_failed"
-        tests_debug "expectation failed: command <${@}> has exit status = $result"
+        tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
-    fi
-
-    if [ $result -ne $code -o $TEST_VERBOSE -ge 5 ]; then
-        tests_debug "command stdout:"
-        tests_indent < $stdout
-        tests_debug "command stderr:"
-        tests_indent < $stderr
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -176,27 +202,42 @@ tests_debug() {
         echo "### ${@}"
     fi >&2
 }
-# }}}
 
-# Internal Code {{{
+# Function tests_do evaluates specified string
+# Args:
+#   ${@}: string to evaluate
 tests_do() {
     tests_debug "$ ${@}"
 
+    # reset stdout/stderr/exitcode
+    >$TEST_STDOUT
+    >$TEST_STDERR
+    >$TEST_EXITCODE
+
     {
         if [ $TEST_VERBOSE -lt 2 ]; then
-            tests_eval "${@}" > /dev/null 2>/dev/null
+            tests_eval "${@}" > $TEST_STDOUT 2> $TEST_STDERR
         fi
 
         if [ $TEST_VERBOSE -lt 3 ]; then
-            tests_eval "${@}" > /dev/null
+            tests_eval "${@}" \
+                2> >(tee $TEST_STDERR) \
+                1> >(tee $TEST_STDOUT > /dev/null)
         fi
 
         if [ $TEST_VERBOSE -ge 4 ]; then
-            tests_eval "${@}"
+            tests_eval "${@}" \
+                2> >(tee $TEST_STDERR) \
+                1> >(tee $TEST_STDOUT)
         fi
+
+        echo $? > $TEST_EXITCODE
     } 2>&1 | tests_indent
 }
 
+# }}}
+
+# Internal Code {{{
 tests_eval() {
     local cmd=()
     for i in "${@}"; do
@@ -264,7 +305,7 @@ tests_run_all() {
                 echo
                 cat $stdout
                 rm -f $stdout
-                echo "$file" > .last-testcase
+                tests_set_last "$file"
                 return
             fi
         else
@@ -272,6 +313,8 @@ tests_run_all() {
         fi
         total_assertions_cnt=$(($total_assertions_cnt+$TEST_ASSERTS))
     done
+
+    tests_rm_last
 
     echo
     echo
@@ -301,12 +344,26 @@ tests_get_last() {
     cat .last-testcase
 }
 
+tests_set_last() {
+    local testcase=$1
+    echo "$testcase" > .last-testcase
+}
+
+tests_rm_last() {
+    rm -f .last-testcase
+}
+
 tests_verbose() {
-    export TEST_VERBOSE=$1
+    TEST_VERBOSE=$1
 }
 
 tests_init() {
-    export TEST_ID="$(mktemp -t -d tests.XXXX)"
+    TEST_ID="$(mktemp -t -d tests.XXXX)"
+
+    TEST_STDERR="$TEST_ID/stderr"
+    TEST_STDOUT="$TEST_ID/stdout"
+    TEST_EXITCODE="$TEST_ID/exitcode"
+
     tests_debug "new test session"
 }
 
@@ -320,26 +377,3 @@ tests_cleanup() {
 
     return $success
 }
-
-TEST_ID=""
-TEST_VERBOSE=0
-TEST_ASSERTS=0
-
-if [ "$1" == "all" ]; then
-    tests_run_all
-fi
-
-if [ "$1" == "one" ]; then
-    tests_verbose 5
-    if [ -e "$2" ]; then
-        tests_run_one "$2"
-    else
-        if [ "$(tests_get_last)" ]; then
-            tests_run_one "$(tests_get_last)"
-        else
-            echo "no last failed testcase found"
-            exit 1
-        fi
-    fi
-fi
-# }}}
