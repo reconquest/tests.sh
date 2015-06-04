@@ -59,7 +59,7 @@ tests_assert_stdout() {
     tests_assert_stdout_re "$(tests_quote_re "$expected")"
 }
 
-# Function tests_assert_re evaluates command and checks that it's output
+# Function tests_assert_re checks that last evaluated command output
 # (stdout or stderr) matches regexp.
 # Args:
 #   $1: stdout|stderr|file
@@ -87,11 +87,42 @@ tests_assert_re() {
         tests_debug "<<< ${target}"
     fi
 
-    if [ $result -gt 0 -o $TEST_VERBOSE -ge 5 ]; then
-        tests_debug "command stdout:"
-        tests_indent < "$TEST_STDOUT"
-        tests_debug "command stderr:"
-        tests_indent < "$TEST_STDERR"
+    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+}
+
+# Function tests_diff checks diff of last evaluated command output (stdout or
+# stder) or file with given file or content.
+# Args:
+#   $1: string|file (expected)
+#   $2: stdout|stderr|string|file (actual)
+tests_diff() {
+    local expected_target="$1"
+    local actual_target="$2"
+    shift 2
+
+    if [ -f $expected_target ]; then
+        expected_file=$expected_target
+    else
+        expected_file=<(echo "$expected_target")
+    fi
+
+    if [ -f $actual_target ]; then
+        actual_file=$actual_target
+    elif [ "$actual_target" = "stdout" ]; then
+        actual_file=$TEST_STDOUT
+    elif [ "$actual_target" = "stderr" ]; then
+        actual_file=$TEST_STDOUT
+    else
+        actual_file=<(echo "$actual_target")
+    fi
+
+    local diff=$(diff -u $expected_file $actual_file)
+    local result=$?
+
+    if [ $result -gt 0 ]; then
+        touch "$TEST_ID/_failed"
+        tests_debug "diff failed: "
+        tests_ident < "$diff"
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
@@ -134,13 +165,6 @@ tests_assert_exitcode() {
         touch "$TEST_ID/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
-    fi
-
-    if [ $result -ne $code -o $TEST_VERBOSE -ge 5 ]; then
-        tests_debug "command stdout:"
-        tests_indent < $TEST_STDOUT
-        tests_debug "command stderr:"
-        tests_indent < $TEST_STDERR
     fi
 
     TEST_ASSERTS=$(($TEST_ASSERTS+1))
