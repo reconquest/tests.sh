@@ -217,7 +217,7 @@ tests_do() {
     >$TEST_STDERR
     >$TEST_EXITCODE
 
-    {
+    (
         if [ $TEST_VERBOSE -lt 2 ]; then
             tests_eval "${@}" > $TEST_STDOUT 2> $TEST_STDERR
         fi
@@ -235,9 +235,13 @@ tests_do() {
         fi
 
         echo $? > $TEST_EXITCODE
-    } 2>&1 | tests_indent
+    ) 2>&1 | tests_indent
 }
 
+tests_background() {
+    local command="${@}"
+    eval $command {0..255}\<\&- {0..255}\>\&- \&
+}
 # }}}
 
 # Internal Code {{{
@@ -313,6 +317,10 @@ tests_run_all() {
             fi
         else
             tests_run_one "$file"
+            local result=$?
+            if [ $result -ne 0 ]; then
+                return
+            fi
         fi
         total_assertions_cnt=$(($total_assertions_cnt+$TEST_ASSERTS))
     done
@@ -331,10 +339,18 @@ tests_run_one() {
     tests_debug "TESTCASE $(readlink -f $file)"
 
     tests_init
+
     (
         source "$file"
     )
+
+    if [[ $? -ne 0 ]]; then
+        tests_debug "test exited with non-zero exit code "
+        touch "$TEST_ID/_failed"
+    fi
+
     tests_cleanup
+
 
     if [ $? -gt 0 ]; then
         tests_debug "TEST FAILED $(readlink -f $file)"
