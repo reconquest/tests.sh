@@ -101,29 +101,31 @@ tests_diff() {
     local actual_target="$2"
     shift 2
 
-    if [ -f $expected_target ]; then
-        expected_file=$expected_target
+    if [ -e "$expected_target" ]; then
+        expected_content="$(cat $expected_target)"
     else
-        expected_file=<(echo "$expected_target")
+        expected_content="$expected_target"
     fi
 
-    if [ -f $actual_target ]; then
-        actual_file=$actual_target
+    if [ -e "$actual_target" ]; then
+        actual_content="$(cat $actual_target)"
     elif [ "$actual_target" = "stdout" ]; then
-        actual_file=$TEST_STDOUT
+        actual_content="$(cat $TEST_STDOUT)"
     elif [ "$actual_target" = "stderr" ]; then
-        actual_file=$TEST_STDOUT
+        actual_content="$(cat $TEST_STDOUT)"
     else
-        actual_file=<(echo "$actual_target")
+        actual_content="$actual_target"
     fi
 
-    local diff=$(diff -u $expected_file $actual_file)
+    local diff
+    diff=$(diff -u <(echo "$expected_content") <(echo "$actual_content"))
+
     local result=$?
 
-    if [ $result -gt 0 ]; then
+    if [ $result -ne 0 ]; then
         touch "$TEST_ID/_failed"
         tests_debug "diff failed: "
-        tests_ident < "$diff"
+        tests_indent <<< "$diff"
         tests_interrupt
     fi
 
@@ -163,7 +165,7 @@ tests_assert_exitcode() {
     shift
 
     local result=$(cat $TEST_EXITCODE)
-    if [ $result -ne $code ]; then
+    if [[ "$result" != "$code" ]]; then
         touch "$TEST_ID/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
@@ -239,8 +241,7 @@ tests_do() {
 }
 
 tests_background() {
-    local command="${@}"
-    eval $command {0..255}\<\&- {0..255}\>\&- \&
+    eval "( ${@} )" {0..255}\<\&- {0..255}\>\&- \&
 }
 # }}}
 
@@ -343,9 +344,11 @@ tests_run_one() {
     (
         source "$file"
     )
+    local result=$?
 
-    if [[ $? -ne 0 ]]; then
-        tests_debug "test exited with non-zero exit code "
+    if [[ $result -ne 0 && ! -f "$TEST_ID/_failed" ]]; then
+        tests_debug "test exited with non-zero exit code"
+        tests_debug "exit code = $result"
         touch "$TEST_ID/_failed"
     fi
 
