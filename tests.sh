@@ -127,7 +127,6 @@ tests_diff() {
 
     if [ $result -ne 0 ]; then
         touch "$TEST_ID/_failed"
-        echo  "aaa" | nc localhost 1399
         tests_debug "diff failed: "
         tests_indent <<< "$diff"
         tests_interrupt
