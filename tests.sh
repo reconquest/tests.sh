@@ -416,13 +416,15 @@ tests_run_all() {
 }
 
 tests_run_one() {
-    local file="$1"
+    local target="$1"
+    local file="$(readlink -f $1)"
 
-    tests_debug "TESTCASE $(readlink -f $file)"
+    tests_debug "TESTCASE $file"
 
     tests_init
 
     (
+        cd $(tests_tmpdir)
         source "$file"
     )
     local result=$?
