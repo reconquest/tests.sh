@@ -16,6 +16,9 @@ TEST_STDOUT=
 # Last stderr
 TEST_STDERR=
 
+# Iterator for background functions
+TEST_BG_ITERATOR=0
+
 # Public API Functions {{{
 
 # Function tests_tmpdir returns temporary directory for current test session.
@@ -124,8 +127,28 @@ tests_diff() {
 
     if [ $result -ne 0 ]; then
         touch "$TEST_ID/_failed"
+        echo  "aaa" | nc localhost 1399
         tests_debug "diff failed: "
         tests_indent <<< "$diff"
+        tests_interrupt
+    fi
+
+    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+}
+
+# Function tests_test is the wrapper for 'test' utility, which check exit code
+# of 'test' utility after running.
+# Args:
+#   $@: arguments for 'test' utility
+tests_test() {
+    local args="${@}"
+
+    test "$args"
+    local result=$?
+
+    if [ $result -ne 0 ]; then
+        touch "$TEST_ID/_failed"
+        tests_debug "test $args: failed"
         tests_interrupt
     fi
 
@@ -240,12 +263,70 @@ tests_do() {
     ) 2>&1 | tests_indent
 }
 
+# Function tests_background runs any command in background, this is very useful
+# if you test some running service.
+# Processes which runned by tests_background will be killed on cleanup state,
+# and if test failed, stderr and stdout of all background processes will be
+# printed.
+# Args:
+#   $@: string to evaluate
 tests_background() {
-    eval "( ${@} )" {0..255}\<\&- {0..255}\>\&- \&
+    local cmd="${@}"
+
+    TEST_BG_ITERATOR=$(($TEST_BG_ITERATOR + 1))
+    local bg_id=$TEST_BG_ITERATOR
+
+    tests_debug "starting background work #$bg_id"
+    tests_debug "# $cmd"
+
+    local bg_dir="$(tests_tmpdir)/_bg_$bg_id/"
+    mkdir "$bg_dir"
+
+    tests_debug "working directory: $bg_dir"
+
+    echo "$bg_id" > "$bg_dir/id"
+    echo "$cmd" > "$bg_dir/cmd"
+
+    touch "$bg_dir/stdout"
+    touch "$bg_dir/stderr"
+    touch "$bg_dir/pid"
+
+    eval "( $cmd >$bg_dir/stdout 2>$bg_dir/stderr )" \
+        {0..255}\<\&- {0..255}\>\&- \&
+
+    local bg_pid
+    bg_pid=$(pgrep -f "$cmd")
+
+    if [ $? -ne 0 ]; then
+        tests_debug "background process does not started, interrupting test"
+        tests_interrupt
+    fi
+
+    echo "$bg_pid" > "$bg_dir/pid"
+    tests_debug "background process started, pid = $bg_pid"
 }
+
+# Function tests_background_pid returning pid of last runned background
+# process.
+tests_background_pid() {
+    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/pid"
+}
+
+# Function tests_background_pid returning stdout of last runned background
+# process.
+tests_background_stdout() {
+    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/stdout"
+}
+
+# Function tests_background_pid returning stdoerr of last runned background
+# process.
+tests_background_stderr() {
+    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/stderr"
+}
+
 # }}}
 
-# Internal Code {{{
+# Inernal Code {{{
 tests_eval() {
     local cmd=()
     for i in "${@}"; do
@@ -396,6 +477,41 @@ tests_cleanup() {
 
     test ! -e "$TEST_ID/_failed"
     local success=$?
+
+    for bg_dir in $(tests_tmpdir)/_bg_*; do
+        test -d $bg_dir
+        if [ $? -ne 0 ]; then
+            continue
+        fi
+
+        local bg_id=$(cat $bg_dir/id)
+        local bg_pid=$(cat $bg_dir/pid)
+        local bg_cmd=$(cat $bg_dir/cmd)
+        local bg_stdout=$(cat $bg_dir/stdout)
+        local bg_stderr=$(cat $bg_dir/stderr)
+
+        kill -9 $bg_pid
+        tests_debug "background process #$bg_id stopped"
+
+        if [ $success -ne 0 ]; then
+            tests_debug "background process #$bg_id cmd:"
+            tests_debug "# $bg_cmd"
+
+            if [[ "$bg_stdout" == "" ]]; then
+                tests_debug "background process #$bg_id stdout is empty"
+            else
+                tests_debug "background process #$bg_id stdout:"
+                tests_indent <<< "$bg_stdout"
+            fi
+
+            if [[ "$bg_stderr" == "" ]]; then
+                tests_debug "background process #$bg_id stderr is empty"
+            else
+                tests_debug "background process #$bg_id stderr:"
+                tests_indent <<< "$bg_stderr"
+            fi
+        fi
+    done
 
     rm -rf "$TEST_ID"
 
