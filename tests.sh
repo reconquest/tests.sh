@@ -284,7 +284,7 @@ tests_background() {
     TEST_BG_ITERATOR=$(($TEST_BG_ITERATOR + 1))
     local bg_id=$TEST_BG_ITERATOR
 
-    tests_debug "starting background work #$bg_id"
+    tests_debug "starting background task #$bg_id"
     tests_debug "# $cmd"
 
     local bg_dir="$(tests_tmpdir)/_bg_$bg_id/"
@@ -501,23 +501,23 @@ tests_cleanup() {
         local bg_stderr=$(cat $bg_dir/stderr)
 
         kill -9 $bg_pid
-        tests_debug "background process #$bg_id stopped"
+        tests_debug "background task #$bg_id stopped"
 
         if [ $success -ne 0 ]; then
-            tests_debug "background process #$bg_id cmd:"
+            tests_debug "background task #$bg_id cmd:"
             tests_debug "# $bg_cmd"
 
             if [[ "$bg_stdout" == "" ]]; then
-                tests_debug "background process #$bg_id stdout is empty"
+                tests_debug "background task #$bg_id stdout is empty"
             else
-                tests_debug "background process #$bg_id stdout:"
+                tests_debug "background task #$bg_id stdout:"
                 tests_indent <<< "$bg_stdout"
             fi
 
             if [[ "$bg_stderr" == "" ]]; then
-                tests_debug "background process #$bg_id stderr is empty"
+                tests_debug "background task #$bg_id stderr is empty"
             else
-                tests_debug "background process #$bg_id stderr:"
+                tests_debug "background task #$bg_id stderr:"
                 tests_indent <<< "$bg_stderr"
             fi
         fi
