@@ -230,6 +230,15 @@ tests_debug() {
     fi >&2
 }
 
+# Function tests_cd changes work directory to specified directory.
+# Args:
+#   $1: directory
+tests_cd() {
+    local dir=$1
+    tests_debug "\$ cd $1"
+    cd $1
+}
+
 # Function tests_do evaluates specified string
 # Args:
 #   ${@}: string to evaluate
