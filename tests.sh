@@ -19,6 +19,9 @@ TEST_STDERR=
 # Iterator for background functions
 TEST_BG_ITERATOR=0
 
+# Current working directory for testcase.
+TEST_CASE_DIR=""
+
 # Public API Functions {{{
 
 # Function tests_tmpdir returns temporary directory for current test session.
@@ -48,7 +51,7 @@ tests_assert_equals() {
         tests_interrupt
     fi
 
-    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+    tests_inc_asserts_count
 }
 
 # Function tests_assert_stdout compares last evaluated command stdout
@@ -91,7 +94,7 @@ tests_assert_re() {
         tests_interrupt
     fi
 
-    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+    tests_inc_asserts_count
 }
 
 # Function tests_diff checks diff of last evaluated command output (stdout or
@@ -132,7 +135,7 @@ tests_diff() {
         tests_interrupt
     fi
 
-    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+    tests_inc_asserts_count
 }
 
 # Function tests_test is the wrapper for 'test' utility, which check exit code
@@ -142,7 +145,8 @@ tests_diff() {
 tests_test() {
     local args="${@}"
 
-    test "$args"
+    tests_debug "test $args"
+    test "${@}"
     local result=$?
 
     if [ $result -ne 0 ]; then
@@ -151,7 +155,7 @@ tests_test() {
         tests_interrupt
     fi
 
-    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+    tests_inc_asserts_count
 }
 
 # Function tests_assert_stdout_re checks that stdout of last evaluated command
@@ -194,7 +198,7 @@ tests_assert_exitcode() {
         tests_interrupt
     fi
 
-    TEST_ASSERTS=$(($TEST_ASSERTS+1))
+    tests_inc_asserts_count
 }
 
 # Function tests_cd change current dir to specified and log this action.
@@ -269,6 +273,8 @@ tests_do() {
 
         echo $? > $TEST_EXITCODE
     ) 2>&1 | tests_indent
+
+    return $(cat $TEST_EXITCODE)
 }
 
 # Function tests_background runs any command in background, this is very useful
@@ -375,12 +381,20 @@ tests_quote_cmd() {
 }
 
 tests_run_all() {
+    if ! stat *.test.sh >/dev/null; then
+        echo no testcases found.
+
+        exit 1
+    fi
+
     local verbose=$TEST_VERBOSE
     TEST_VERBOSE=4
 
     echo running test suite at: $(cd "`dirname $0`"; pwd)
     echo
-    echo -ne '  '
+    if [ "$verbose" = "0" ]; then
+        echo -ne '  '
+    fi
 
     local success=0
     local total_assertions_cnt=0
@@ -411,6 +425,8 @@ tests_run_all() {
             if [ $result -ne 0 ]; then
                 return
             fi
+
+            success=$((success+1))
         fi
         total_assertions_cnt=$(($total_assertions_cnt+$TEST_ASSERTS))
     done
@@ -431,11 +447,15 @@ tests_run_one() {
 
     tests_init
 
+    touch $TEST_ID/_asserts
+    TEST_CASE_DIR=$(dirname "$file")
     (
         cd $(tests_tmpdir)
         source "$file"
     )
     local result=$?
+
+    TEST_ASSERTS=$(cat $TEST_ID/_asserts)
 
     if [[ $result -ne 0 && ! -f "$TEST_ID/_failed" ]]; then
         tests_debug "test exited with non-zero exit code"
@@ -489,8 +509,7 @@ tests_cleanup() {
     local success=$?
 
     for bg_dir in $(tests_tmpdir)/_bg_*; do
-        test -d $bg_dir
-        if [ $? -ne 0 ]; then
+        if ! test -d $bg_dir; then
             continue
         fi
 
@@ -531,3 +550,57 @@ tests_cleanup() {
 tests_interrupt() {
     exit 88
 }
+
+tests_copy() {
+    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" $TEST_ID"
+    cp -r "$TEST_CASE_DIR/$1" $TEST_ID
+}
+
+tests_inc_asserts_count() {
+    local count=$(cat $TEST_ID/_asserts)
+    echo $(($count+1)) > $TEST_ID/_asserts
+}
+
+tests_source() {
+    tests_copy "$1"
+
+    local source_name=$(basename $1)
+    tests_debug "source $source_name (begin)"
+    source "$source_name"
+    tests_debug "source $source_name (end)"
+}
+
+if [ "$(basename $0)" == "tests.sh" ]; then
+    while getopts "hAO:v" arg; do
+        case $arg in
+            A)
+                tests_run_all
+                ;;
+            O)
+                tests_run_one "$OPTARG"
+                ;;
+            v)
+                TEST_VERBOSE=$(($TEST_VERBOSE+1))
+                ;;
+            *)
+                cat <<EOF
+tests.sh --- simple test library for testing commands.
+
+tests.sh expected to find files named *.test.sh in current directory, and
+they are treated as testcases.
+
+Usage:
+    tests.sh -h | ---help
+    tests.sh [-v] -A
+    tests.sh -O <name>
+
+Options:
+    -h | --help  Show this help.
+    -A           Run all testcases in current directory.
+    -O <name>    Run specified testcase only.
+    -v           Verbosity. Flag can be specified several times.
+EOF
+                ;;
+        esac
+    done
+fi
