@@ -259,13 +259,13 @@ tests_do() {
             tests_eval "${@}" > $TEST_STDOUT 2> $TEST_STDERR
         fi
 
-        if [ $TEST_VERBOSE -lt 3 ]; then
+        if [ $TEST_VERBOSE -eq 3 ]; then
             tests_eval "${@}" \
                 2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT > /dev/null)
         fi
 
-        if [ $TEST_VERBOSE -ge 4 ]; then
+        if [ $TEST_VERBOSE -gt 3 ]; then
             tests_eval "${@}" \
                 2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT)
