@@ -16,9 +16,6 @@ TEST_STDOUT=
 # Last stderr
 TEST_STDERR=
 
-# Iterator for background functions
-TEST_BG_ITERATOR=0
-
 # Current working directory for testcase.
 TEST_CASE_DIR=""
 
@@ -28,6 +25,11 @@ TEST_CASE_DIR=""
 # Echo:
 #   Path to temp dir, e.g, /tmp/tests.XXXX
 tests_tmpdir() {
+    if [[ "$TEST_ID" == "" ]]; then
+        tests_debug "test session not initialized"
+        tests_interrupt
+    fi
+
     echo "$TEST_ID"
 }
 
@@ -44,7 +46,7 @@ tests_assert_equals() {
     local actual="$2"
 
     if [ "$expected" != "$actual" ]; then
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
         tests_debug "expectation failed: two strings not equals"
         tests_debug ">>> $expected$"
         tests_debug "<<< $actual$"
@@ -87,14 +89,25 @@ tests_assert_re() {
     local result=$?
 
     if [ $result -gt 0 ]; then
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
         tests_debug "expectation failed: regexp does not match"
         tests_debug ">>> ${regexp:-<empty regexp>}"
         tests_debug "<<< ${target}"
+        tests_debug "<<< $(cat $file)"
         tests_interrupt
     fi
 
     tests_inc_asserts_count
+}
+
+# Function tests_stdout returns file with stdout of last command.
+tests_stdout() {
+    echo $TEST_STDOUT
+}
+
+# Function tests_stderr returns file with stderr of last command.
+tests_stderr() {
+    echo $TEST_STDERR
 }
 
 # Function tests_diff checks diff of last evaluated command output (stdout or
@@ -129,7 +142,7 @@ tests_diff() {
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
         tests_debug "diff failed: "
         tests_indent <<< "$diff"
         tests_interrupt
@@ -150,7 +163,7 @@ tests_test() {
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
         tests_debug "test $args: failed"
         tests_interrupt
     fi
@@ -192,21 +205,13 @@ tests_assert_exitcode() {
 
     local result=$(cat $TEST_EXITCODE)
     if [[ "$result" != "$code" ]]; then
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
         tests_interrupt
     fi
 
     tests_inc_asserts_count
-}
-
-# Function tests_cd change current dir to specified and log this action.
-# Args:
-#   $1: directory to go to
-tests_cd() {
-    tests_debug "cd $1"
-    cd $1
 }
 
 # Function tests_describe evaluates given command and show it's output,
@@ -277,6 +282,14 @@ tests_do() {
     return $(cat $TEST_EXITCODE)
 }
 
+tests_mkdir() {
+    tests_do mkdir -p $(tests_tmpdir)/$1
+}
+
+tests_tmp_cd() {
+    tests_cd $(tests_tmpdir)/$1
+}
+
 # Function tests_background runs any command in background, this is very useful
 # if you test some running service.
 # Processes which runned by tests_background will be killed on cleanup state,
@@ -287,25 +300,24 @@ tests_do() {
 tests_background() {
     local cmd="${@}"
 
-    TEST_BG_ITERATOR=$(($TEST_BG_ITERATOR + 1))
-    local bg_id=$TEST_BG_ITERATOR
+    local identifier=$(date +'%s.%N' | md5sum | head -c 6)
+    local dir="$(tests_tmpdir)/.bg/$identifier/"
 
-    tests_debug "starting background task #$bg_id"
-    tests_debug "# $cmd"
 
-    local bg_dir="$(tests_tmpdir)/_bg_$bg_id/"
-    mkdir "$bg_dir"
+    tests_debug "starting background task #$identifier"
+    tests_debug "# '$cmd'"
 
-    tests_debug "working directory: $bg_dir"
+    mkdir -p "$dir"
+    tests_debug "working directory: $dir"
 
-    echo "$bg_id" > "$bg_dir/id"
-    echo "$cmd" > "$bg_dir/cmd"
+    echo "$identifier" > "$dir/id"
+    echo "$cmd" > "$dir/cmd"
 
-    touch "$bg_dir/stdout"
-    touch "$bg_dir/stderr"
-    touch "$bg_dir/pid"
+    touch "$dir/stdout"
+    touch "$dir/stderr"
+    touch "$dir/pid"
 
-    eval "( $cmd >$bg_dir/stdout 2>$bg_dir/stderr )" \
+    eval "( $cmd >$dir/stdout 2>$dir/stderr )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
     local bg_pid
@@ -316,28 +328,72 @@ tests_background() {
         tests_interrupt
     fi
 
-    echo "$bg_pid" > "$bg_dir/pid"
+    echo "$bg_pid" > "$dir/pid"
     tests_debug "background process started, pid = $bg_pid"
+
+    echo "$identifier"
 }
 
 # Function tests_background_pid returning pid of last runned background
 # process.
 tests_background_pid() {
-    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/pid"
+    cat "$(tests_tmpdir)/.bg/$1/pid"
 }
 
-# Function tests_background_pid returning stdout of last runned background
+# Function tests_background_stdout returning stdout of last runned background
 # process.
 tests_background_stdout() {
-    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/stdout"
+    echo "$(tests_tmpdir)/.bg/$1/stdout"
 }
 
-# Function tests_background_pid returning stdoerr of last runned background
+# Function tests_background_stderr returning stdoerr of last runned background
 # process.
 tests_background_stderr() {
-    cat "$(tests_tmpdir)/_bg_$TEST_BG_ITERATOR/stderr"
+    echo "$(tests_tmpdir)/.bg/$1/stderr"
 }
 
+# Function 'tests_stop_background' stops background work.
+# Args:
+#    $1 - string
+tests_stop_background() {
+    local id="$1"
+    local pid=$(cat `tests_tmpdir`/.bg/$id/pid)
+
+    kill -9 $pid
+
+    tests_debug "background task #$id stopped"
+    rm -rf `tests_tmpdir`/.bg/$id/
+}
+
+tests_wait_file_changes() {
+    local function="$1"
+    local file="$2"
+    local sleep_interval="$3"
+    local sleep_max="$4"
+
+    local stat_initial=$(stat $file)
+    local sleep_iter=0
+
+
+    tests_debug "% waiting file changes after executing cmd: $function"
+    tests_do $function
+
+    while true; do
+        sleep_iter=$(($sleep_iter+1))
+
+        local stat_actual=$(stat $file)
+        if [[ "$stat_initial" == "$stat_actual" ]]; then
+            if [[ $sleep_iter -ne $sleep_max ]]; then
+                tests_do sleep $sleep_interval
+                continue
+            fi
+
+            return 1
+        fi
+
+        return 0
+    done
+}
 # }}}
 
 # Inernal Code {{{
@@ -447,7 +503,7 @@ tests_run_one() {
 
     tests_init
 
-    touch $TEST_ID/_asserts
+    touch `tests_tmpdir`/_asserts
     TEST_CASE_DIR=$(dirname "$file")
     (
         cd $(tests_tmpdir)
@@ -455,12 +511,12 @@ tests_run_one() {
     )
     local result=$?
 
-    TEST_ASSERTS=$(cat $TEST_ID/_asserts)
+    TEST_ASSERTS=$(cat `tests_tmpdir`/_asserts)
 
-    if [[ $result -ne 0 && ! -f "$TEST_ID/_failed" ]]; then
+    if [[ $result -ne 0 && ! -f "`tests_tmpdir`/_failed" ]]; then
         tests_debug "test exited with non-zero exit code"
         tests_debug "exit code = $result"
-        touch "$TEST_ID/_failed"
+        touch "`tests_tmpdir`/_failed"
     fi
 
     tests_cleanup
@@ -495,34 +551,32 @@ tests_verbose() {
 tests_init() {
     TEST_ID="$(mktemp -t -d tests.XXXX)"
 
-    TEST_STDERR="$TEST_ID/stderr"
-    TEST_STDOUT="$TEST_ID/stdout"
-    TEST_EXITCODE="$TEST_ID/exitcode"
+    TEST_STDERR="`tests_tmpdir`/stderr"
+    TEST_STDOUT="`tests_tmpdir`/stdout"
+    TEST_EXITCODE="`tests_tmpdir`/exitcode"
 
     tests_debug "new test session"
 }
 
 tests_cleanup() {
-    tests_debug "$TEST_ID" "cleanup test session"
+    tests_debug "`tests_tmpdir`" "cleanup test session"
 
-    test ! -e "$TEST_ID/_failed"
+    test ! -e "`tests_tmpdir`/_failed"
     local success=$?
 
-    for bg_dir in $(tests_tmpdir)/_bg_*; do
+    for bg_dir in $(tests_tmpdir)/.bg/*; do
         if ! test -d $bg_dir; then
             continue
         fi
 
         local bg_id=$(cat $bg_dir/id)
-        local bg_pid=$(cat $bg_dir/pid)
-        local bg_cmd=$(cat $bg_dir/cmd)
-        local bg_stdout=$(cat $bg_dir/stdout)
-        local bg_stderr=$(cat $bg_dir/stderr)
-
-        kill -9 $bg_pid
-        tests_debug "background task #$bg_id stopped"
 
         if [ $success -ne 0 ]; then
+            local bg_cmd=$(cat $bg_dir/cmd)
+            local bg_stdout=$(cat $bg_dir/stdout)
+            local bg_stderr=$(cat $bg_dir/stderr)
+
+
             tests_debug "background task #$bg_id cmd:"
             tests_debug "# $bg_cmd"
 
@@ -540,9 +594,11 @@ tests_cleanup() {
                 tests_indent <<< "$bg_stderr"
             fi
         fi
+
+        tests_stop_background $bg_id
     done
 
-    rm -rf "$TEST_ID"
+    rm -rf "`tests_tmpdir`"
 
     return $success
 }
@@ -552,13 +608,13 @@ tests_interrupt() {
 }
 
 tests_copy() {
-    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" $TEST_ID"
-    cp -r "$TEST_CASE_DIR/$1" $TEST_ID
+    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" `tests_tmpdir`"
+    cp -r "$TEST_CASE_DIR/$1" `tests_tmpdir`
 }
 
 tests_inc_asserts_count() {
-    local count=$(cat $TEST_ID/_asserts)
-    echo $(($count+1)) > $TEST_ID/_asserts
+    local count=$(cat `tests_tmpdir`/_asserts)
+    echo $(($count+1)) > `tests_tmpdir`/_asserts
 }
 
 tests_source() {
