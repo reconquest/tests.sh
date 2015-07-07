@@ -2,7 +2,7 @@
 
 
 # Current test session
-TEST_ID=""
+TEST_DIR=""
 
 # Verbosity level
 TEST_VERBOSE=0
@@ -25,12 +25,12 @@ TEST_CASE_DIR=""
 # Echo:
 #   Path to temp dir, e.g, /tmp/tests.XXXX
 tests_tmpdir() {
-    if [[ "$TEST_ID" == "" ]]; then
+    if [[ "$TEST_DIR" == "" ]]; then
         tests_debug "test session not initialized"
         tests_interrupt
     fi
 
-    echo "$TEST_ID"
+    echo "$TEST_DIR"
 }
 
 # Function tests_assert_equals checks, that first string arg is equals
@@ -46,7 +46,7 @@ tests_assert_equals() {
     local actual="$2"
 
     if [ "$expected" != "$actual" ]; then
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
         tests_debug "expectation failed: two strings not equals"
         tests_debug ">>> $expected$"
         tests_debug "<<< $actual$"
@@ -89,7 +89,7 @@ tests_assert_re() {
     local result=$?
 
     if [ $result -gt 0 ]; then
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
         tests_debug "expectation failed: regexp does not match"
         tests_debug ">>> ${regexp:-<empty regexp>}"
         tests_debug "<<< ${target}"
@@ -137,12 +137,12 @@ tests_diff() {
     fi
 
     local diff
-    diff=$(diff -u <(echo "$expected_content") <(echo "$actual_content"))
+    diff=$(diff -u <(echo -e "$expected_content") <(echo -e "$actual_content"))
 
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
         tests_debug "diff failed: "
         tests_indent <<< "$diff"
         tests_interrupt
@@ -163,7 +163,7 @@ tests_test() {
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
         tests_debug "test $args: failed"
         tests_interrupt
     fi
@@ -205,7 +205,7 @@ tests_assert_exitcode() {
 
     local result=$(cat $TEST_EXITCODE)
     if [[ "$result" != "$code" ]]; then
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
         tests_interrupt
@@ -232,8 +232,8 @@ tests_debug() {
         return
     fi
 
-    if [ "$TEST_ID" ]; then
-        echo "# $TEST_ID: ${@}"
+    if [ "$TEST_DIR" ]; then
+        echo "# $TEST_DIR: ${@}"
     else
         echo "### ${@}"
     fi >&2
@@ -282,12 +282,17 @@ tests_do() {
     return $(cat $TEST_EXITCODE)
 }
 
+tests_ensure() {
+    tests_do "${@}"
+    tests_assert_success
+}
+
 tests_mkdir() {
-    tests_do mkdir -p $(tests_tmpdir)/$1
+    tests_do mkdir -p $TEST_DIR/$1
 }
 
 tests_tmp_cd() {
-    tests_cd $(tests_tmpdir)/$1
+    tests_cd $TEST_DIR/$1
 }
 
 # Function tests_background runs any command in background, this is very useful
@@ -301,7 +306,7 @@ tests_background() {
     local cmd="${@}"
 
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
-    local dir="$(tests_tmpdir)/.bg/$identifier/"
+    local dir="$TEST_DIR/.bg/$identifier/"
 
 
     tests_debug "starting background task #$identifier"
@@ -337,19 +342,19 @@ tests_background() {
 # Function tests_background_pid returning pid of last runned background
 # process.
 tests_background_pid() {
-    cat "$(tests_tmpdir)/.bg/$1/pid"
+    cat "$TEST_DIR/.bg/$1/pid"
 }
 
 # Function tests_background_stdout returning stdout of last runned background
 # process.
 tests_background_stdout() {
-    echo "$(tests_tmpdir)/.bg/$1/stdout"
+    echo "$TEST_DIR/.bg/$1/stdout"
 }
 
 # Function tests_background_stderr returning stdoerr of last runned background
 # process.
 tests_background_stderr() {
-    echo "$(tests_tmpdir)/.bg/$1/stderr"
+    echo "$TEST_DIR/.bg/$1/stderr"
 }
 
 # Function 'tests_stop_background' stops background work.
@@ -357,12 +362,12 @@ tests_background_stderr() {
 #    $1 - string
 tests_stop_background() {
     local id="$1"
-    local pid=$(cat `tests_tmpdir`/.bg/$id/pid)
+    local pid=$(cat $TEST_DIR/.bg/$id/pid)
 
     kill -9 $pid
 
     tests_debug "background task #$id stopped"
-    rm -rf `tests_tmpdir`/.bg/$id/
+    rm -rf $TEST_DIR/.bg/$id/
 }
 
 tests_wait_file_changes() {
@@ -503,24 +508,24 @@ tests_run_one() {
 
     tests_init
 
-    touch `tests_tmpdir`/_asserts
+    touch $TEST_DIR/_asserts
     TEST_CASE_DIR=$(dirname "$file")
     (
-        cd $(tests_tmpdir)
+        PATH="$TEST_DIR/bin:$PATH"
+        cd $TEST_DIR
         source "$file"
     )
     local result=$?
 
-    TEST_ASSERTS=$(cat `tests_tmpdir`/_asserts)
+    TEST_ASSERTS=$(cat $TEST_DIR/_asserts)
 
-    if [[ $result -ne 0 && ! -f "`tests_tmpdir`/_failed" ]]; then
+    if [[ $result -ne 0 && ! -f "$TEST_DIR/_failed" ]]; then
         tests_debug "test exited with non-zero exit code"
         tests_debug "exit code = $result"
-        touch "`tests_tmpdir`/_failed"
+        touch "$TEST_DIR/_failed"
     fi
 
     tests_cleanup
-
 
     if [ $? -gt 0 ]; then
         tests_debug "TEST FAILED $(readlink -f $file)"
@@ -549,22 +554,24 @@ tests_verbose() {
 }
 
 tests_init() {
-    TEST_ID="$(mktemp -t -d tests.XXXX)"
+    TEST_DIR="$(mktemp -t -d tests.XXXX)"
 
-    TEST_STDERR="`tests_tmpdir`/stderr"
-    TEST_STDOUT="`tests_tmpdir`/stdout"
-    TEST_EXITCODE="`tests_tmpdir`/exitcode"
+    mkdir $TEST_DIR/bin
+
+    TEST_STDERR="$TEST_DIR/stderr"
+    TEST_STDOUT="$TEST_DIR/stdout"
+    TEST_EXITCODE="$TEST_DIR/exitcode"
 
     tests_debug "new test session"
 }
 
 tests_cleanup() {
-    tests_debug "`tests_tmpdir`" "cleanup test session"
+    tests_debug "$TEST_DIR" "cleanup test session"
 
-    test ! -e "`tests_tmpdir`/_failed"
+    test ! -e "$TEST_DIR/_failed"
     local success=$?
 
-    for bg_dir in $(tests_tmpdir)/.bg/*; do
+    for bg_dir in $TEST_DIR/.bg/*; do
         if ! test -d $bg_dir; then
             continue
         fi
@@ -598,7 +605,7 @@ tests_cleanup() {
         tests_stop_background $bg_id
     done
 
-    rm -rf "`tests_tmpdir`"
+    rm -rf "$TEST_DIR"
 
     return $success
 }
@@ -608,13 +615,13 @@ tests_interrupt() {
 }
 
 tests_copy() {
-    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" `tests_tmpdir`"
-    cp -r "$TEST_CASE_DIR/$1" `tests_tmpdir`
+    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" $TEST_DIR"
+    cp -r "$TEST_CASE_DIR/$1" $TEST_DIR
 }
 
 tests_inc_asserts_count() {
-    local count=$(cat `tests_tmpdir`/_asserts)
-    echo $(($count+1)) > `tests_tmpdir`/_asserts
+    local count=$(cat $TEST_DIR/_asserts)
+    echo $(($count+1)) > $TEST_DIR/_asserts
 }
 
 tests_source() {
