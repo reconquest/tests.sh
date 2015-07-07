@@ -605,7 +605,9 @@ tests_cleanup() {
         tests_stop_background $bg_id
     done
 
-    rm -rf "$TEST_DIR"
+    if [ $success -eq 0 ]; then
+        rm -rf "$TEST_DIR"
+    fi
 
     return $success
 }
