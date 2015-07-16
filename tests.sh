@@ -75,6 +75,7 @@ tests_assert_stdout() {
 tests_assert_re() {
     local target="$1"
     local regexp="$2"
+    echo '$regexp: '$regexp
     shift 2
 
     if [ -f $target ]; then
@@ -156,10 +157,10 @@ tests_diff() {
 # Args:
 #   $@: arguments for 'test' utility
 tests_test() {
-    local args="${@}"
+    local args="$@"
 
     tests_debug "test $args"
-    test "${@}"
+    test "$@"
     local result=$?
 
     if [ $result -ne 0 ]; then
@@ -171,12 +172,20 @@ tests_test() {
     tests_inc_asserts_count
 }
 
+tests_put() {
+    local file="$1"
+    local content="$2"
+    tests_debug "writing a file $file with content:"
+    tests_debug "$content"
+    echo "$content" > "$file"
+}
+
 # Function tests_assert_stdout_re checks that stdout of last evaluated command
 # matches given regexp.
 # Args:
 #   $1: regexp
 tests_assert_stdout_re() {
-    tests_assert_re stdout "${@}"
+    tests_assert_re stdout "$@"
 }
 
 # Function tests_assert_stderr_re do the same, as tests_assert_stdout_re, but
@@ -184,13 +193,13 @@ tests_assert_stdout_re() {
 # Args:
 #   $1: regexp
 tests_assert_stderr_re() {
-    tests_assert_re stderr "${@}"
+    tests_assert_re stderr "$@"
 }
 
 # Function tests_assert_success checks that last evaluated command exit status
 # is zero.
 # Args:
-#   ${@}: command to evaluate
+#   $@: command to evaluate
 tests_assert_success() {
     tests_assert_exitcode 0
 }
@@ -217,25 +226,25 @@ tests_assert_exitcode() {
 # Function tests_describe evaluates given command and show it's output,
 # used for debug purposes.
 # Args:
-#   ${@}: command to evaluate
+#   $@: command to evaluate
 tests_describe() {
     tests_debug "this test decription:"
 
-    tests_eval "${@}" | tests_indent
+    tests_eval "$@" | tests_indent
 }
 
 # Function tests_debug echoes specified string as debug info.
 # Args:
-#   ${@}: string to echo
+#   $@: string to echo
 tests_debug() {
     if [ $TEST_VERBOSE -lt 1 ]; then
         return
     fi
 
     if [ "$TEST_DIR" ]; then
-        echo "# $TEST_DIR: ${@}"
+        echo "# $TEST_DIR: $@"
     else
-        echo "### ${@}"
+        echo "### $@"
     fi >&2
 }
 
@@ -250,9 +259,9 @@ tests_cd() {
 
 # Function tests_do evaluates specified string
 # Args:
-#   ${@}: string to evaluate
+#   $@: string to evaluate
 tests_do() {
-    tests_debug "$ ${@}"
+    tests_debug "$ $@"
 
     # reset stdout/stderr/exitcode
     >$TEST_STDOUT
@@ -261,17 +270,17 @@ tests_do() {
 
     (
         if [ $TEST_VERBOSE -lt 2 ]; then
-            tests_eval "${@}" > $TEST_STDOUT 2> $TEST_STDERR
+            tests_eval "$@" > $TEST_STDOUT 2> $TEST_STDERR
         fi
 
         if [ $TEST_VERBOSE -eq 3 ]; then
-            tests_eval "${@}" \
+            tests_eval "$@" \
                 2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT > /dev/null)
         fi
 
         if [ $TEST_VERBOSE -gt 3 ]; then
-            tests_eval "${@}" \
+            tests_eval "$@" \
                 2> >(tee $TEST_STDERR) \
                 1> >(tee $TEST_STDOUT)
         fi
@@ -283,7 +292,7 @@ tests_do() {
 }
 
 tests_ensure() {
-    tests_do "${@}"
+    tests_do "$@"
     tests_assert_success
 }
 
@@ -303,7 +312,7 @@ tests_tmp_cd() {
 # Args:
 #   $@: string to evaluate
 tests_background() {
-    local cmd="${@}"
+    local cmd="$@"
 
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
     local dir="$TEST_DIR/.bg/$identifier/"
@@ -404,7 +413,7 @@ tests_wait_file_changes() {
 # Inernal Code {{{
 tests_eval() {
     local cmd=()
-    for i in "${@}"; do
+    for i in "$@"; do
         case $i in
             '`'*)  cmd+=($i) ;;
             *'`')  cmd+=($i) ;;
@@ -429,7 +438,7 @@ tests_quote_re() {
 
 tests_quote_cmd() {
     local cmd=()
-    for i in "${@}"; do
+    for i in "$@"; do
         grep -q "[' \"\$]" <<< "$i"
         if [ $? -eq 0 ]; then
             cmd+=($(sed -r -e "s/['\"\$]/\\&/" -e "s/.*/'&'/" <<< "$i"))
