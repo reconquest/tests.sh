@@ -67,12 +67,12 @@ tests_assert_stdout() {
     tests_assert_stdout_re "$(tests_quote_re "$expected")"
 }
 
-# Function tests_assert_re checks that last evaluated command output
+# Function tests_re tests that last evaluated command output
 # (stdout or stderr) matches regexp.
 # Args:
 #   $1: stdout|stderr|<filename>
 #   $2: regexp
-tests_assert_re() {
+tests_re() {
     local target="$1"
     local regexp="$2"
     echo '$regexp: '$regexp
@@ -87,6 +87,19 @@ tests_assert_re() {
     fi
 
     grep -qP "$regexp" $file
+}
+
+# Function tests_assert_re checks that last evaluated command output
+# (stdout or stderr) matches regexp.
+# Args:
+#   $1: stdout|stderr|<filename>
+#   $2: regexp
+tests_assert_re() {
+    local target="$1"
+    local regexp="$2"
+    shift 2
+
+    tests_re "$target" "$regexp"
     local result=$?
 
     if [ $result -gt 0 ]; then
