@@ -75,7 +75,6 @@ tests_assert_stdout() {
 tests_re() {
     local target="$1"
     local regexp="$2"
-    echo '$regexp: '$regexp
     shift 2
 
     if [ -f $target ]; then
@@ -87,6 +86,7 @@ tests_re() {
     fi
 
     grep -qP "$regexp" $file
+    return $?
 }
 
 # Function tests_assert_re checks that last evaluated command output
