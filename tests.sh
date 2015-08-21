@@ -500,13 +500,13 @@ tests_run_all() {
                 cat $stdout
                 rm -f $stdout
                 tests_set_last "$file"
-                return
+                exit $result
             fi
         else
             tests_run_one "$file"
             local result=$?
             if [ $result -ne 0 ]; then
-                return
+                exit $result
             fi
 
             success=$((success+1))
