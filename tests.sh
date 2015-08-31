@@ -134,6 +134,8 @@ tests_diff() {
     local actual_target="$2"
     shift 2
 
+    local options="-u $@"
+
     if [ -e "$expected_target" ]; then
         expected_content="$(cat $expected_target)"
     else
@@ -151,7 +153,9 @@ tests_diff() {
     fi
 
     local diff
-    diff=$(diff -u <(echo -e "$expected_content") <(echo -e "$actual_content"))
+    diff=$(diff `echo $options` \
+        <(echo -e "$expected_content") \
+        <(echo -e "$actual_content"))
 
     local result=$?
 
