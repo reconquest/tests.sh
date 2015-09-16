@@ -169,6 +169,10 @@ tests_diff() {
     tests_inc_asserts_count
 }
 
+tests_diff_blank() {
+    tests_diff "$1" "$2" "-B"
+}
+
 # Function tests_test is the wrapper for 'test' utility, which check exit code
 # of 'test' utility after running.
 # Args:
