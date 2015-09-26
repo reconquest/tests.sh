@@ -193,6 +193,12 @@ tests_test() {
     tests_inc_asserts_count
 }
 
+tests_tmp_put() {
+    local file="$1"
+    local content="$2"
+    tests_put "$TEST_DIR/$file" "$content"
+}
+
 tests_put() {
     local file="$1"
     local content="$2"
