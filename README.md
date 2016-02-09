@@ -1,12 +1,26 @@
 tests.sh
 ========
 
-Simple library for creating tests for shell programs.
+tests.sh --- simple test library for testing commands.
 
-It consist only of one file and it file acts as library and as test runner.
+tests.sh expected to find files named `*.test.sh` in current directory, and
+they are treated as testcases.
 
-Usage
-=====
+## Synopsis
+```
+Usage:
+    tests.sh -h | ---help
+    tests.sh [-v] -A
+    tests.sh -O <name>
+
+Options:
+    -h | --help  Show this help.
+    -A           Run all testcases in current directory.
+    -O <name>    Run specified testcase only.
+    -v           Verbosity. Flag can be specified several times.
+```
+
+### Usage example
 
 1. Create directory `tests/` (name can vary);
 2. Place `tests.sh` into `tests/`;
@@ -25,6 +39,6 @@ Usage
        '^1 ' \
        wc -l a.txt
    ```
-4. Run whole test suite using: `./tests.sh all`;
-5. Run one testcase using: `./tests.sh one <test-case-name>.test.sh`;
-6. Run last failed testcase using: `./test.sh one`;
+4. Run whole test suite using: `./tests.sh -A`;
+5. Run one testcase using: `./tests.sh -O <test-case-name>.test.sh`;
+6. Run last failed testcase using: `./test.sh -O`;
