@@ -2,22 +2,22 @@
 
 
 # Current test session
-TEST_DIR=""
+_TESTS_DIR=""
 
 # Verbosity level
-TEST_VERBOSE=0
+_TESTS_VERBOSE=0
 
 # Assertions counter
-TEST_ASSERTS=0
+_TESTS_ASSERTS=0
 
 # Last stdout
-TEST_STDOUT=
+_TESTS_STDOUT=
 
 # Last stderr
-TEST_STDERR=
+_TESTS_STDERR=
 
 # Current working directory for testcase.
-TEST_CASE_DIR=""
+_TESTS_CASE_DIR=""
 
 # Public API Functions {{{
 
@@ -25,12 +25,12 @@ TEST_CASE_DIR=""
 # Echo:
 #   Path to temp dir, e.g, /tmp/tests.XXXX
 tests_tmpdir() {
-    if [[ "$TEST_DIR" == "" ]]; then
+    if [[ "$_TESTS_DIR" == "" ]]; then
         tests_debug "test session not initialized"
         tests_interrupt
     fi
 
-    echo "$TEST_DIR"
+    echo "$_TESTS_DIR"
 }
 
 # Function tests_assert_equals checks, that first string arg is equals
@@ -46,7 +46,7 @@ tests_assert_equals() {
     local actual="$2"
 
     if [ "$expected" != "$actual" ]; then
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
         tests_debug "expectation failed: two strings not equals"
         tests_debug ">>> $expected$"
         tests_debug "<<< $actual$"
@@ -80,9 +80,9 @@ tests_re() {
     if [ -f $target ]; then
         file=$target
     elif [ "$target" = "stdout" ]; then
-        file=$TEST_STDOUT
+        file=$_TESTS_STDOUT
     else
-        file=$TEST_STDERR
+        file=$_TESTS_STDERR
     fi
 
     grep -qP "$regexp" $file
@@ -103,7 +103,7 @@ tests_assert_re() {
     local result=$?
 
     if [ $result -gt 0 ]; then
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
         tests_debug "expectation failed: regexp does not match"
         tests_debug ">>> ${regexp:-<empty regexp>}"
         tests_debug "<<< ${target}"
@@ -116,12 +116,12 @@ tests_assert_re() {
 
 # Function tests_stdout returns file with stdout of last command.
 tests_stdout() {
-    echo $TEST_STDOUT
+    echo $_TESTS_STDOUT
 }
 
 # Function tests_stderr returns file with stderr of last command.
 tests_stderr() {
-    echo $TEST_STDERR
+    echo $_TESTS_STDERR
 }
 
 # Function tests_diff checks diff of last evaluated command output (stdout or
@@ -145,9 +145,9 @@ tests_diff() {
     if [ -e "$actual_target" ]; then
         actual_content="$(cat $actual_target)"
     elif [ "$actual_target" = "stdout" ]; then
-        actual_content="$(cat $TEST_STDOUT)"
+        actual_content="$(cat $_TESTS_STDOUT)"
     elif [ "$actual_target" = "stderr" ]; then
-        actual_content="$(cat $TEST_STDOUT)"
+        actual_content="$(cat $_TESTS_STDOUT)"
     else
         actual_content="$actual_target"
     fi
@@ -160,7 +160,7 @@ tests_diff() {
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
         tests_debug "diff failed: "
         tests_indent <<< "$diff"
         tests_interrupt
@@ -185,7 +185,7 @@ tests_test() {
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
         tests_debug "test $args: failed"
         tests_interrupt
     fi
@@ -196,7 +196,7 @@ tests_test() {
 tests_tmp_put() {
     local file="$1"
     local content="$2"
-    tests_put "$TEST_DIR/$file" "$content"
+    tests_put "$_TESTS_DIR/$file" "$content"
 }
 
 tests_put() {
@@ -239,9 +239,9 @@ tests_assert_exitcode() {
     local code=$1
     shift
 
-    local result=$(cat $TEST_EXITCODE)
+    local result=$(cat $_TESTS_EXITCODE)
     if [[ "$result" != "$code" ]]; then
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
         tests_debug "expectation failed: actual exit status = $result"
         tests_debug "expected exit code is $code"
         tests_interrupt
@@ -264,12 +264,12 @@ tests_describe() {
 # Args:
 #   $@: string to echo
 tests_debug() {
-    if [ $TEST_VERBOSE -lt 1 ]; then
+    if [ $_TESTS_VERBOSE -lt 1 ]; then
         return
     fi
 
-    if [ "$TEST_DIR" ]; then
-        echo "# $TEST_DIR: $@"
+    if [ "$_TESTS_DIR" ]; then
+        echo "# $_TESTS_DIR: $@"
     else
         echo "### $@"
     fi >&2
@@ -291,31 +291,31 @@ tests_do() {
     tests_debug "$ $@"
 
     # reset stdout/stderr/exitcode
-    >$TEST_STDOUT
-    >$TEST_STDERR
-    >$TEST_EXITCODE
+    >$_TESTS_STDOUT
+    >$_TESTS_STDERR
+    >$_TESTS_EXITCODE
 
     (
-        if [ $TEST_VERBOSE -lt 2 ]; then
-            tests_eval "$@" > $TEST_STDOUT 2> $TEST_STDERR
+        if [ $_TESTS_VERBOSE -lt 2 ]; then
+            tests_eval "$@" > $_TESTS_STDOUT 2> $_TESTS_STDERR
         fi
 
-        if [ $TEST_VERBOSE -eq 3 ]; then
+        if [ $_TESTS_VERBOSE -eq 3 ]; then
             tests_eval "$@" \
-                2> >(tee $TEST_STDERR) \
-                1> >(tee $TEST_STDOUT > /dev/null)
+                2> >(tee $_TESTS_STDERR) \
+                1> >(tee $_TESTS_STDOUT > /dev/null)
         fi
 
-        if [ $TEST_VERBOSE -gt 3 ]; then
+        if [ $_TESTS_VERBOSE -gt 3 ]; then
             tests_eval "$@" \
-                2> >(tee $TEST_STDERR) \
-                1> >(tee $TEST_STDOUT)
+                2> >(tee $_TESTS_STDERR) \
+                1> >(tee $_TESTS_STDOUT)
         fi
 
-        echo $? > $TEST_EXITCODE
+        echo $? > $_TESTS_EXITCODE
     ) 2>&1 | tests_indent
 
-    return $(cat $TEST_EXITCODE)
+    return $(cat $_TESTS_EXITCODE)
 }
 
 tests_ensure() {
@@ -324,11 +324,11 @@ tests_ensure() {
 }
 
 tests_mkdir() {
-    tests_do mkdir -p $TEST_DIR/$1
+    tests_do mkdir -p $_TESTS_DIR/$1
 }
 
 tests_tmp_cd() {
-    tests_cd $TEST_DIR/$1
+    tests_cd $_TESTS_DIR/$1
 }
 
 # Function tests_background runs any command in background, this is very useful
@@ -342,7 +342,7 @@ tests_background() {
     local cmd="$@"
 
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
-    local dir="$TEST_DIR/.bg/$identifier/"
+    local dir="$_TESTS_DIR/.bg/$identifier/"
 
 
     tests_debug "starting background task #$identifier"
@@ -378,19 +378,19 @@ tests_background() {
 # Function tests_background_pid returning pid of last runned background
 # process.
 tests_background_pid() {
-    cat "$TEST_DIR/.bg/$1/pid"
+    cat "$_TESTS_DIR/.bg/$1/pid"
 }
 
 # Function tests_background_stdout returning stdout of last runned background
 # process.
 tests_background_stdout() {
-    echo "$TEST_DIR/.bg/$1/stdout"
+    echo "$_TESTS_DIR/.bg/$1/stdout"
 }
 
 # Function tests_background_stderr returning stdoerr of last runned background
 # process.
 tests_background_stderr() {
-    echo "$TEST_DIR/.bg/$1/stderr"
+    echo "$_TESTS_DIR/.bg/$1/stderr"
 }
 
 # Function 'tests_stop_background' stops background work.
@@ -398,12 +398,12 @@ tests_background_stderr() {
 #    $1 - string
 tests_stop_background() {
     local id="$1"
-    local pid=$(cat $TEST_DIR/.bg/$id/pid)
+    local pid=$(cat $_TESTS_DIR/.bg/$id/pid)
 
     kill -9 $pid
 
     tests_debug "background task #$id stopped"
-    rm -rf $TEST_DIR/.bg/$id/
+    rm -rf $_TESTS_DIR/.bg/$id/
 }
 
 tests_wait_file_changes() {
@@ -484,8 +484,8 @@ tests_run_all() {
         exit 1
     fi
 
-    local verbose=$TEST_VERBOSE
-    TEST_VERBOSE=4
+    local verbose=$_TESTS_VERBOSE
+    _TESTS_VERBOSE=4
 
     echo running test suite at: $(cd "`dirname $0`"; pwd)
     echo
@@ -498,7 +498,7 @@ tests_run_all() {
     for file in *.test.sh; do
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
-            TEST_ASSERTS=0
+            _TESTS_ASSERTS=0
             local pwd="$(pwd)"
             tests_run_one "$file" > $stdout 2>&1
             local result=$?
@@ -525,7 +525,7 @@ tests_run_all() {
 
             success=$((success+1))
         fi
-        total_assertions_cnt=$(($total_assertions_cnt+$TEST_ASSERTS))
+        total_assertions_cnt=$(($total_assertions_cnt+$_TESTS_ASSERTS))
     done
 
     tests_rm_last
@@ -544,21 +544,21 @@ tests_run_one() {
 
     tests_init
 
-    touch $TEST_DIR/_asserts
-    TEST_CASE_DIR=$(dirname "$file")
+    touch $_TESTS_DIR/_asserts
+    _TESTS_CASE_DIR=$(dirname "$file")
     (
-        PATH="$TEST_DIR/bin:$PATH"
-        cd $TEST_DIR
+        PATH="$_TESTS_DIR/bin:$PATH"
+        cd $_TESTS_DIR
         source "$file"
     )
     local result=$?
 
-    TEST_ASSERTS=$(cat $TEST_DIR/_asserts)
+    _TESTS_ASSERTS=$(cat $_TESTS_DIR/_asserts)
 
-    if [[ $result -ne 0 && ! -f "$TEST_DIR/_failed" ]]; then
+    if [[ $result -ne 0 && ! -f "$_TESTS_DIR/_failed" ]]; then
         tests_debug "test exited with non-zero exit code"
         tests_debug "exit code = $result"
-        touch "$TEST_DIR/_failed"
+        touch "$_TESTS_DIR/_failed"
     fi
 
     tests_cleanup
@@ -586,28 +586,28 @@ tests_rm_last() {
 }
 
 tests_verbose() {
-    TEST_VERBOSE=$1
+    _TESTS_VERBOSE=$1
 }
 
 tests_init() {
-    TEST_DIR="$(mktemp -t -d tests.XXXX)"
+    _TESTS_DIR="$(mktemp -t -d tests.XXXX)"
 
-    mkdir $TEST_DIR/bin
+    mkdir $_TESTS_DIR/bin
 
-    TEST_STDERR="$TEST_DIR/stderr"
-    TEST_STDOUT="$TEST_DIR/stdout"
-    TEST_EXITCODE="$TEST_DIR/exitcode"
+    _TESTS_STDERR="$_TESTS_DIR/stderr"
+    _TESTS_STDOUT="$_TESTS_DIR/stdout"
+    _TESTS_EXITCODE="$_TESTS_DIR/exitcode"
 
     tests_debug "new test session"
 }
 
 tests_cleanup() {
-    tests_debug "$TEST_DIR" "cleanup test session"
+    tests_debug "$_TESTS_DIR" "cleanup test session"
 
-    test ! -e "$TEST_DIR/_failed"
+    test ! -e "$_TESTS_DIR/_failed"
     local success=$?
 
-    for bg_dir in $TEST_DIR/.bg/*; do
+    for bg_dir in $_TESTS_DIR/.bg/*; do
         if ! test -d $bg_dir; then
             continue
         fi
@@ -642,7 +642,7 @@ tests_cleanup() {
     done
 
     if [ $success -eq 0 ]; then
-        rm -rf "$TEST_DIR"
+        rm -rf "$_TESTS_DIR"
     fi
 
     return $success
@@ -653,13 +653,13 @@ tests_interrupt() {
 }
 
 tests_copy() {
-    tests_debug "cp -r \"$TEST_CASE_DIR/$1\" $TEST_DIR"
-    cp -r "$TEST_CASE_DIR/$1" $TEST_DIR
+    tests_debug "cp -r \"$_TESTS_CASE_DIR/$1\" $_TESTS_DIR"
+    cp -r "$_TESTS_CASE_DIR/$1" $_TESTS_DIR
 }
 
 tests_inc_asserts_count() {
-    local count=$(cat $TEST_DIR/_asserts)
-    echo $(($count+1)) > $TEST_DIR/_asserts
+    local count=$(cat $_TESTS_DIR/_asserts)
+    echo $(($count+1)) > $_TESTS_DIR/_asserts
 }
 
 tests_source() {
@@ -681,7 +681,7 @@ if [ "$(basename $0)" == "tests.sh" ]; then
                 tests_run_one "$OPTARG"
                 ;;
             v)
-                TEST_VERBOSE=$(($TEST_VERBOSE+1))
+                _TESTS_VERBOSE=$(($_TESTS_VERBOSE+1))
                 ;;
             *)
                 cat <<EOF
