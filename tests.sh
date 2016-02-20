@@ -1,78 +1,87 @@
 #!/bin/bash
 
-
-# Current test session
-_TESTS_DIR=""
-
-# Verbosity level
-_TESTS_VERBOSE=0
-
-# Assertions counter
-_TESTS_ASSERTS=0
-
-# Last stdout
-_TESTS_STDOUT=
-
-# Last stderr
-_TESTS_STDERR=
-
-# Current working directory for testcase.
-_TESTS_CASE_DIR=""
-
 # Public API Functions {{{
 
-# Function tests_tmpdir returns temporary directory for current test session.
-# Echo:
-#   Path to temp dir, e.g, /tmp/tests.XXXX
-tests_tmpdir() {
-    if [[ "$_TESTS_DIR" == "" ]]; then
-        tests_debug "test session not initialized"
+# @description Make all functions from tests.sh available without 'tests:'
+# prefix.
+#
+# @noargs
+tests:import-namespace() {
+    builtin eval $(declare -F | grep -F -- '-f tests:' | cut -d: -f2 |
+        sed -re's/.*/&() { tests:& "${@}"; };/'
+    )
+}
+
+# @description Returns temporary directory for current test session.
+#
+# It can be used as a workspace for the testcase.
+#
+# @example
+#   ls $(tests:get-tmp-dir)
+#
+# @echo Path to temp dir, e.g, /tmp/tests.XXXX
+tests:get-tmp-dir() {
+    if [[ "$tests_dir" == "" ]]; then
+        tests:debug "test session not initialized"
         tests_interrupt
     fi
 
-    echo "$_TESTS_DIR"
+    echo "$tests_dir"
 }
 
-# Function tests_assert_equals checks, that first string arg is equals
-# to second.
-# Args:
-#   $1: expected string
-#   $2: actual value
-# Return:
-#   1: if strings is not equals
-#   0: otherwise
-tests_assert_equals() {
+# @description Asserts, that first string arg is equals to second.
+#
+# @arg $1 string Expected string.
+# @arg $2 string Actual value.
+tests:assert-equals() {
     local expected="$1"
     local actual="$2"
 
-    if [ "$expected" != "$actual" ]; then
-        touch "$_TESTS_DIR/_failed"
-        tests_debug "expectation failed: two strings not equals"
-        tests_debug ">>> $expected$"
-        tests_debug "<<< $actual$"
+    if ! tests_make_assertion "$expected" "$actual"; then
+        touch "$tests_dir/.failed"
+        tests:debug "expectation failed: two strings not equals"
+        tests:debug ">>> $expected$"
+        tests:debug "<<< $actual$"
         tests_interrupt
     fi
 
     tests_inc_asserts_count
 }
 
-# Function tests_assert_stdout compares last evaluated command stdout
-# to given string.
-# Args:
-#   $1: expected stdout
-tests_assert_stdout() {
+# @description Asserts, that last evaluated command's stdout contains given
+# string.
+#
+# @arg $1 string Expected stdout.
+tests:assert-stdout() {
     local expected="$1"
     shift
 
-    tests_assert_stdout_re "$(tests_quote_re "$expected")"
+    tests:assert-stdout-re "$(tests_quote_re <<< "$expected")"
 }
 
-# Function tests_re tests that last evaluated command output
-# (stdout or stderr) matches regexp.
-# Args:
-#   $1: stdout|stderr|<filename>
-#   $2: regexp
-tests_re() {
+# @description Asserts, that last evaluated command's stderr contains given
+# string.
+#
+# @arg $1 string Expected stderr.
+tests:assert-stderr() {
+    local expected="$1"
+    shift
+
+    tests:assert-stderr-re "$(tests_quote_re <<< "$expected")"
+}
+
+# @description Compares, that last evaluated command output (stdout, stderr) or
+# file contents matches regexp.
+#
+# @arg $1 'stdout'|'stderr'|filename If 'stdout' or 'stderr' is used, use
+# last command's stream as actual value. If filename is specified, then use
+# contents of specified filename as actual contents.
+#
+# @arg $2 regexp Regexp to match, same as in grep.
+#
+# @exitcode 1 If comparison failed.
+# @exitcode 0 If contents equals.
+tests:match-re() {
     local target="$1"
     local regexp="$2"
     shift 2
@@ -80,58 +89,50 @@ tests_re() {
     if [ -f $target ]; then
         file=$target
     elif [ "$target" = "stdout" ]; then
-        file=$_TESTS_STDOUT
+        file=$tests_stdout
     else
-        file=$_TESTS_STDERR
+        file=$tests_stderr
     fi
 
     grep -qP "$regexp" $file
     return $?
 }
 
-# Function tests_assert_re checks that last evaluated command output
-# (stdout or stderr) matches regexp.
-# Args:
-#   $1: stdout|stderr|<filename>
-#   $2: regexp
-tests_assert_re() {
+# @description Same, as 'tests:match-re', but abort testing if comparison failed.
+#
+# @see tests:match-re
+tests:assert-re() {
     local target="$1"
     local regexp="$2"
     shift 2
 
-    tests_re "$target" "$regexp"
+    tests:match-re "$target" "$regexp"
     local result=$?
 
-    if [ $result -gt 0 ]; then
-        touch "$_TESTS_DIR/_failed"
-        tests_debug "expectation failed: regexp does not match"
-        tests_debug ">>> ${regexp:-<empty regexp>}"
-        tests_debug "<<< ${target}"
-        tests_debug "<<< $(cat $file)"
+    if ! tests_make_assertion $result 0; then
+        touch "$tests_dir/.failed"
+        tests:debug "expectation failed: regexp does not match"
+        tests:debug "*** match on: ${target}"
+        tests:debug ">>> ${regexp:-<empty regexp>}"
+        tests:debug "<<<"
+        cat $file | tests_indent
+
         tests_interrupt
     fi
 
     tests_inc_asserts_count
 }
 
-# Function tests_stdout returns file with stdout of last command.
-tests_stdout() {
-    echo $_TESTS_STDOUT
-}
-
-# Function tests_stderr returns file with stderr of last command.
-tests_stderr() {
-    echo $_TESTS_STDERR
-}
-
-# Function tests_diff checks diff of last evaluated command output (stdout or
-# stder) or file with given file or content.
-# Args:
-#   $1: string|file (expected)
-#   $2: stdout|stderr|string|file (actual)
-tests_diff() {
-    local expected_target="$1"
-    local actual_target="$2"
+# @description Asserts, that there are no diff on the last command output
+# (stderr or stdout), or on string or on specified file with specified string
+# or file.
+#
+# @arg $1 'stdout'|'stderr'|string|filename Actual value.
+# @arg $2 string|filename Expected value.
+# @arg $@ any Additional arguments for diff.
+tests:assert-no-diff() {
+    local actual_target="$1"
+    local expected_target="$2"
     shift 2
 
     local options="-u $@"
@@ -145,9 +146,9 @@ tests_diff() {
     if [ -e "$actual_target" ]; then
         actual_content="$(cat $actual_target)"
     elif [ "$actual_target" = "stdout" ]; then
-        actual_content="$(cat $_TESTS_STDOUT)"
+        actual_content="$(cat $tests_stdout)"
     elif [ "$actual_target" = "stderr" ]; then
-        actual_content="$(cat $_TESTS_STDOUT)"
+        actual_content="$(cat $tests_stderr)"
     else
         actual_content="$actual_target"
     fi
@@ -159,9 +160,9 @@ tests_diff() {
 
     local result=$?
 
-    if [ $result -ne 0 ]; then
-        touch "$_TESTS_DIR/_failed"
-        tests_debug "diff failed: "
+    if ! tests_make_assertion $result 0; then
+        touch "$tests_dir/.failed"
+        tests:debug "diff failed: "
         tests_indent <<< "$diff"
         tests_interrupt
     fi
@@ -169,187 +170,250 @@ tests_diff() {
     tests_inc_asserts_count
 }
 
-tests_diff_blank() {
-    tests_diff "$1" "$2" "-B"
+# @description Returns file containing stdout of last command.
+#
+# @echo Filename containing stdout.
+tests:get-stdout() {
+    echo $tests_stdout
 }
 
-# Function tests_test is the wrapper for 'test' utility, which check exit code
-# of 'test' utility after running.
-# Args:
-#   $@: arguments for 'test' utility
-tests_test() {
+# @description Returns file containing stderr of last command.
+#
+# @echo Filename containing stderr.
+tests:get-stderr() {
+    echo $tests_stderr
+}
+
+# @description Same as 'tests:assert-diff', but ignore changes whose lines are
+# all blank.
+#
+# @see tests:diff
+tests:assert-no-diff-blank() {
+    tests:assert-no-diff "$1" "$2" "-B"
+}
+
+# @description Same, as shell 'test' function, but asserts, that exit code is
+# zero.
+#
+# @arg $@ Arguments for 'test' function.
+tests:assert-test() {
     local args="$@"
 
-    tests_debug "test $args"
+    tests:debug "test $args"
     test "$@"
     local result=$?
 
     if [ $result -ne 0 ]; then
-        touch "$_TESTS_DIR/_failed"
-        tests_debug "test $args: failed"
+        touch "$tests_dir/.failed"
+        tests:debug "test $args: failed"
         tests_interrupt
     fi
 
     tests_inc_asserts_count
 }
 
-tests_tmp_put() {
+# @description Put specified contents into temporary file with given name.
+#
+# @arg $1 filename Temporary file name.
+# @arg $2 string Contents to put.
+tests:put-string() {
     local file="$1"
     local content="$2"
-    tests_put "$_TESTS_DIR/$file" "$content"
-}
 
-tests_put() {
-    local file="$1"
-    local content="$2"
-    tests_debug "writing a file $file with content:"
-    tests_debug "$content"
+    tests:debug "writing a file $file with content:"
+    echo "$content" | tests_indent
+
     echo "$content" > "$file"
 }
 
-# Function tests_assert_stdout_re checks that stdout of last evaluated command
-# matches given regexp.
-# Args:
-#   $1: regexp
-tests_assert_stdout_re() {
-    tests_assert_re stdout "$@"
+# @description Put stdin into temporary file with given name.
+#
+# @arg $1 filename Filename (non-temporary).
+tests:put() {
+    local file="$1"
+
+    cat > "$tests_dir/$file"
+
+    tests:debug "wrote a file $file with content:"
+    cat $file | tests_indent
 }
 
-# Function tests_assert_stderr_re do the same, as tests_assert_stdout_re, but
-# stderr used instead of stdout.
-# Args:
-#   $1: regexp
-tests_assert_stderr_re() {
-    tests_assert_re stderr "$@"
+# @description Asserts that stdout of last evaluated command matches given
+# regexp.
+#
+# @arg $1 regexp Regexp, same as in grep.
+tests:assert-stdout-re() {
+    tests:assert-re stdout "$@"
 }
 
-# Function tests_assert_success checks that last evaluated command exit status
-# is zero.
-# Args:
-#   $@: command to evaluate
-tests_assert_success() {
-    tests_assert_exitcode 0
+# @description Asserts as 'tests:assert-stdout-re', but stderr used instead
+# of stdout.
+#
+# @arg $1 regexp Regexp, same as in grep.
+tests:assert-stderr-re() {
+    tests:assert-re stderr "$@"
 }
 
-# Function tests_assert_exitcode chacks exit code of last evaluated command to
+# @description Asserts that last evaluated command exit status is zero.
+#
+# @noargs
+tests:assert-success() {
+    tests:assert-exitcode 0
+}
+
+# @description Asserts that last evaluated command exit status is not zero.
+# Basically, alias for `test:not tests:assert-success`.
+#
+# @noargs
+tests:assert-fail() {
+    tests:not tests:assert-success
+}
+
+# @description Asserts that exit code of last evaluated command equals to
 # specified value.
-# Args:
-#   $1: expected exit code
-tests_assert_exitcode() {
-    local code=$1
+#
+# @arg $1 int Expected exit code.
+tests:assert-exitcode() {
+    local actual=$?
+    local expected=$1
     shift
 
-    local result=$(cat $_TESTS_EXITCODE)
-    if [[ "$result" != "$code" ]]; then
-        touch "$_TESTS_DIR/_failed"
-        tests_debug "expectation failed: actual exit status = $result"
-        tests_debug "expected exit code is $code"
+    if ! tests_make_assertion "$expected" "$actual"; then
+        touch "$tests_dir/.failed"
+        tests:debug "exit code expectation failed"
+        tests:debug "actual exit code = $actual"
+        tests:debug "expected exit code $tests_last_assert_operation $expected"
         tests_interrupt
     fi
 
     tests_inc_asserts_count
 }
 
-# Function tests_describe evaluates given command and show it's output,
-# used for debug purposes.
-# Args:
-#   $@: command to evaluate
-tests_describe() {
-    tests_debug "this test decription:"
+tests:not() {
+    local old_exitcode=$?
+
+    tests_assert_operation="!="
+    tests_last_assert_operation="!="
+
+    # preserving old exit code for possible tests:assert-success call
+    ( return $old_exitcode )
+
+    builtin eval "${@}"
+    tests_assert_operation="="
+}
+
+# @description Evaluates given command and show it's output in the debug, used
+# for debug purposes.
+#
+# @arg $@ any Command to evaluate.
+tests:describe() {
+    tests:debug "this test decription:"
 
     tests_eval "$@" | tests_indent
 }
 
-# Function tests_debug echoes specified string as debug info.
-# Args:
-#   $@: string to echo
-tests_debug() {
-    if [ $_TESTS_VERBOSE -lt 1 ]; then
+# @description Print specified string in the debug log.
+#
+# @arg $@ any String to echo.
+tests:debug() {
+    if [ $tests_verbose -lt 1 ]; then
         return
     fi
 
-    if [ "$_TESTS_DIR" ]; then
-        echo "# $_TESTS_DIR: $@"
+    if [ "$tests_dir" ]; then
+        echo "# $tests_dir: $@"
     else
         echo "### $@"
     fi >&2
 }
 
-# Function tests_cd changes work directory to specified directory.
-# Args:
-#   $1: directory
-tests_cd() {
+# @description Changes working directory to specified directory.
+#
+# @arg $1 directory Directory to change to.
+tests:cd() {
     local dir=$1
-    tests_debug "\$ cd $1"
-    cd $1
+    tests:debug "\$ cd $1"
+    builtin cd $1
 }
 
-# Function tests_do evaluates specified string
-# Args:
-#   $@: string to evaluate
-tests_do() {
-    tests_debug "$ $@"
-
-    # reset stdout/stderr/exitcode
-    >$_TESTS_STDOUT
-    >$_TESTS_STDERR
-    >$_TESTS_EXITCODE
+# @description Evaluates specified string via shell 'eval'.
+#
+# @arg $@ string String to evaluate.
+tests:eval() {
+    tests:debug "$ $@"
 
     (
-        if [ $_TESTS_VERBOSE -lt 2 ]; then
-            tests_eval "$@" > $_TESTS_STDOUT 2> $_TESTS_STDERR
+        if [ $tests_verbose -lt 3 ]; then
+            tests_eval "$@" > $tests_stdout 2> $tests_stderr
         fi
 
-        if [ $_TESTS_VERBOSE -eq 3 ]; then
+        if [ $tests_verbose -eq 3 ]; then
             tests_eval "$@" \
-                2> >(tee $_TESTS_STDERR) \
-                1> >(tee $_TESTS_STDOUT > /dev/null)
+                2> >(tee $tests_stderr) \
+                1> >(tee $tests_stdout > /dev/null)
         fi
 
-        if [ $_TESTS_VERBOSE -gt 3 ]; then
+        if [ $tests_verbose -gt 3 ]; then
             tests_eval "$@" \
-                2> >(tee $_TESTS_STDERR) \
-                1> >(tee $_TESTS_STDOUT)
+                2> >(tee $tests_stderr) \
+                1> >(tee $tests_stdout)
         fi
 
-        echo $? > $_TESTS_EXITCODE
-    ) 2>&1 | tests_indent
+    ) > $tests_out 2>&1
 
-    return $(cat $_TESTS_EXITCODE)
+    echo $? > $tests_exitcode
+
+    tests_indent < $tests_out
+
+    return $(cat $tests_exitcode)
 }
 
-tests_ensure() {
-    tests_do "$@"
-    tests_assert_success
+# @description Eval specified command and assert, that it has zero exitcode.
+#
+# @arg $@ any Command to evaluate.
+tests:ensure() {
+    tests:eval "$@"
+    tests:assert-success
 }
 
-tests_mkdir() {
-    tests_do mkdir -p $_TESTS_DIR/$1
+# @description Creates temporary directory.
+#
+# @arg $1 string Directory name.
+tests:mkdir() {
+    tests:eval /bin/mkdir -p $tests_dir/$1
 }
 
-tests_tmp_cd() {
-    tests_cd $_TESTS_DIR/$1
+# @description Changes working directory to the specified temporary directory,
+# previously created by 'tests:mkdir'.
+#
+# @arg $1 string Directory name.
+tests:cd-tmp-dir() {
+    tests:cd $tests_dir/$1
 }
 
-# Function tests_background runs any command in background, this is very useful
-# if you test some running service.
-# Processes which runned by tests_background will be killed on cleanup state,
-# and if test failed, stderr and stdout of all background processes will be
-# printed.
-# Args:
-#   $@: string to evaluate
-tests_background() {
+# @description Runs any command in background, this is very useful if you test
+# some running service.
+#
+# Processes which are ran by 'tests:background' will be killed on cleanup
+# state, and if test failed, stderr and stdout of all background processes will
+# be printed.
+#
+# @arg $@ string Command to start.
+#
+# @echo Unique identifier of running backout process.
+tests:run-background() {
     local cmd="$@"
 
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
-    local dir="$_TESTS_DIR/.bg/$identifier/"
+    local dir="$tests_dir/.bg/$identifier/"
 
 
-    tests_debug "starting background task #$identifier"
-    tests_debug "# '$cmd'"
+    tests:debug "starting background task #$identifier"
+    tests:debug "# '$cmd'"
 
-    mkdir -p "$dir"
-    tests_debug "working directory: $dir"
+    /bin/mkdir -p "$dir"
+
+    tests:debug "working directory: $dir"
 
     echo "$identifier" > "$dir/id"
     echo "$cmd" > "$dir/cmd"
@@ -358,66 +422,81 @@ tests_background() {
     touch "$dir/stderr"
     touch "$dir/pid"
 
-    eval "( $cmd >$dir/stdout 2>$dir/stderr )" \
+    builtin eval "( $cmd >$dir/stdout 2>$dir/stderr )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
-    local bg_pid
-    bg_pid=$(pgrep -f "$cmd")
+    local bg_pid=$(pgrep -f "$cmd")
 
     if [ $? -ne 0 ]; then
-        tests_debug "background process does not started, interrupting test"
+        tests:debug "background process does not started, interrupting test"
         tests_interrupt
     fi
 
     echo "$bg_pid" > "$dir/pid"
-    tests_debug "background process started, pid = $bg_pid"
+    tests:debug "background process started, pid = $bg_pid"
 
     echo "$identifier"
 }
 
-# Function tests_background_pid returning pid of last runned background
-# process.
-tests_background_pid() {
-    cat "$_TESTS_DIR/.bg/$1/pid"
+# @description Returns pid of specified background process.
+#
+# @arg $1 string Process ID, returned from 'tests:run-background'.
+#
+# @echo Pid of background process.
+tests:get-background-pid() {
+    cat "$tests_dir/.bg/$1/pid"
 }
 
-# Function tests_background_stdout returning stdout of last runned background
-# process.
-tests_background_stdout() {
-    echo "$_TESTS_DIR/.bg/$1/stdout"
+# @description Returns stdout of specified background process.
+#
+# @arg $1 string Process ID, returned from 'tests:run-background'.
+#
+# @echo Stdout from background process.
+tests:get-background-stdout() {
+    echo "$tests_dir/.bg/$1/stdout"
 }
 
-# Function tests_background_stderr returning stdoerr of last runned background
-# process.
-tests_background_stderr() {
-    echo "$_TESTS_DIR/.bg/$1/stderr"
+# @description Returns stderr of specified background process.
+#
+# @arg $1 string Process ID, returned from 'tests:run-background'.
+#
+# @echo Stderr from background process.
+tests:background-stderr() {
+    echo "$tests_dir/.bg/$1/stderr"
 }
 
-# Function 'tests_stop_background' stops background work.
-# Args:
-#    $1 - string
-tests_stop_background() {
+# @description Stops background process with 'kill -9'.
+#
+# @arg $1 string Process ID, returned from 'tests:run-background'.
+tests:stop-background() {
     local id="$1"
-    local pid=$(cat $_TESTS_DIR/.bg/$id/pid)
+    local pid=$(cat $tests_dir/.bg/$id/pid)
 
     kill -9 $pid
 
-    tests_debug "background task #$id stopped"
-    rm -rf $_TESTS_DIR/.bg/$id/
+    tests:debug "background task #$id stopped"
+    rm -rf $tests_dir/.bg/$id/
 }
 
-tests_wait_file_changes() {
+# @description Waits, until specified file will be changed or timeout passed
+# after executing specified command.
+#
+# @arg $1 string Command to evaluate.
+# @arg $2 filename Filename to wait changes in.
+# @arg $3 int Interval of time to check changes after.
+# @arg $4 int Timeout in seconds.
+tests:wait-file-changes() {
     local function="$1"
     local file="$2"
     local sleep_interval="$3"
-    local sleep_max="$4"
+    local sleep_max="$(( $4/$sleep_interval ))"
 
     local stat_initial=$(stat $file)
     local sleep_iter=0
 
 
-    tests_debug "% waiting file changes after executing cmd: $function"
-    tests_do $function
+    tests:debug "% waiting file changes after executing cmd: $function"
+    tests:eval $function
 
     while true; do
         sleep_iter=$(($sleep_iter+1))
@@ -425,7 +504,7 @@ tests_wait_file_changes() {
         local stat_actual=$(stat $file)
         if [[ "$stat_initial" == "$stat_actual" ]]; then
             if [[ $sleep_iter -ne $sleep_max ]]; then
-                tests_do sleep $sleep_interval
+                tests:eval sleep $sleep_interval
                 continue
             fi
 
@@ -435,9 +514,87 @@ tests_wait_file_changes() {
         return 0
     done
 }
+
+# @description Sets verbosity of testcase output.
+#
+# @arg $1 int Verbosity.
+tests:set-verbose() {
+    tests_verbose=$1
+}
+
+# @description Recursively copy specified file or directory from the testcases
+# dir to the temporary test directory.
+#
+# @arg $1 filename Filename to copy.
+tests:cp() {
+    local files=($tests_case_dir/$1)
+    shift
+
+    while [ $# -gt 1 ]; do
+        files=($files $tests_case_dir/$1)
+
+        shift
+    done
+
+    tests:debug "cp -r ${files[@]} $tests_dir/$1"
+    /bin/cp -r ${files[@]} $tests_dir/$1
+}
+
+# @description Copy specified file from testcases to the temporary test
+# directory and then source it.
+#
+# @arg $1 filename Filename to copy and source.
+tests:source() {
+    tests:cp "$1"
+
+    local source_name=$(basename $1)
+    tests:debug "{BEGIN} source $source_name"
+    builtin source "$source_name"
+    tests:debug "{END} source $source_name"
+}
 # }}}
 
-# Inernal Code {{{
+# Internal Code {{{
+
+# Internal global state {{{
+#
+# Do not use this variables directly.
+
+# Current test session.
+tests_dir=""
+
+# Verbosity level.
+tests_verbose=0
+
+# Assertions counter.
+tests_asserts=0
+
+# File with last stdout.
+tests_stdout=""
+
+# File with last stderr.
+tests_stderr=""
+
+# File with stderr and stout from eval
+tests_out=""
+
+# File with last exitcode.
+tests_exitcode=""
+
+# Current working directory for testcase.
+tests_case_dir=""
+
+# 1 if global setup script evaled.
+tests_setup_done=""
+
+# Operation used in assertions (= or !=)
+tests_assert_operation="="
+
+# Last used assert operation.
+tests_last_assert_operation="="
+
+# }}}
+
 tests_eval() {
     local cmd=()
     for i in "$@"; do
@@ -452,7 +609,7 @@ tests_eval() {
         esac
     done
 
-    eval "${cmd[@]}"
+    builtin eval "${cmd[@]}"
 }
 
 tests_indent() {
@@ -460,7 +617,7 @@ tests_indent() {
 }
 
 tests_quote_re() {
-    sed -r 's/[.*+[()?]|]/\\\0/' < "$1"
+    sed -r 's/[.*+[()?]|]/\\\0/g'
 }
 
 tests_quote_cmd() {
@@ -484,25 +641,29 @@ tests_run_all() {
         exit 1
     fi
 
-    local verbose=$_TESTS_VERBOSE
-    _TESTS_VERBOSE=4
+    local verbose=$tests_verbose
+    if [ $verbose -lt 1 ]; then
+        tests_verbose=4
+    fi
 
-    echo running test suite at: $(cd "`dirname $0`"; pwd)
+    echo running test suite at: $(pwd)
     echo
-    if [ "$verbose" = "0" ]; then
+    if [ $verbose -eq 0 ]; then
         echo -ne '  '
     fi
 
     local success=0
-    local total_assertions_cnt=0
+    local assertions_count=0
     for file in *.test.sh; do
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
-            _TESTS_ASSERTS=0
             local pwd="$(pwd)"
+            tests_asserts=0
+
             tests_run_one "$file" > $stdout 2>&1
             local result=$?
-            cd "$pwd"
+
+            builtin cd "$pwd"
             if [ $result -eq 0 ]; then
                 echo -n .
                 success=$((success+1))
@@ -525,7 +686,7 @@ tests_run_all() {
 
             success=$((success+1))
         fi
-        total_assertions_cnt=$(($total_assertions_cnt+$_TESTS_ASSERTS))
+        assertions_count=$(($assertions_count+$tests_asserts))
     done
 
     tests_rm_last
@@ -533,41 +694,69 @@ tests_run_all() {
     echo
     echo
     echo ---
-    echo "$success tests ($total_assertions_cnt assertions) done successfully!"
+    echo "$success tests ($assertions_count assertions) done successfully!"
 }
 
 tests_run_one() {
-    local target="$1"
-    local file="$(readlink -f $1)"
+    local target="${1:-$(tests_get_last)}"
+    local file="$(readlink -f $target)"
 
-    tests_debug "TESTCASE $file"
+    tests:debug "TEST CASE $file"
 
     tests_init
 
-    touch $_TESTS_DIR/_asserts
-    _TESTS_CASE_DIR=$(dirname "$file")
+    if [ ! -s $tests_dir/.asserts ]; then
+        echo 0 > $tests_dir/.asserts
+    fi
+
+    local run_global_setup=""
+    if [ -e global.setup.sh -a ! "$tests_setup_done" ]; then
+        run_global_setup=1
+        tests_setup_done=1
+    fi
+
+    tests_case_dir=$(dirname "$file")
+
     (
-        PATH="$_TESTS_DIR/bin:$PATH"
-        cd $_TESTS_DIR
-        source "$file"
+        PATH="$tests_dir/bin:$PATH"
+
+        if [ $run_global_setup ]; then
+            tests:debug "{GLOBAL} SETUP: ${@}"
+            tests:source global.setup.sh
+        fi
+
+        local run_setup=""
+        if [ -e local.setup.sh ]; then
+            run_setup=1
+        fi
+
+        builtin cd $tests_dir
+
+        if [ $run_setup ]; then
+            tests:debug "{BEGIN} SETUP"
+            tests:source local.setup.sh
+            tests:debug "{END} SETUP"
+        fi
+
+        builtin source "$file"
     )
     local result=$?
 
-    _TESTS_ASSERTS=$(cat $_TESTS_DIR/_asserts)
+    tests_asserts=$(cat $tests_dir/.asserts)
 
-    if [[ $result -ne 0 && ! -f "$_TESTS_DIR/_failed" ]]; then
-        tests_debug "test exited with non-zero exit code"
-        tests_debug "exit code = $result"
-        touch "$_TESTS_DIR/_failed"
+    if [[ $result -ne 0 && ! -f "$tests_dir/.failed" ]]; then
+        tests:debug "test exited with non-zero exit code"
+        tests:debug "exit code = $result"
+        touch "$tests_dir/.failed"
     fi
 
     tests_cleanup
 
     if [ $? -gt 0 ]; then
-        tests_debug "TEST FAILED $(readlink -f $file)"
+        tests:debug "TEST FAILED $(readlink -f $file)"
         return 1
     else
-        tests_debug "TEST PASSED"
+        tests:debug "TEST PASSED $(readlink -f $file)"
         return 0
     fi
 }
@@ -585,29 +774,26 @@ tests_rm_last() {
     rm -f .last-testcase
 }
 
-tests_verbose() {
-    _TESTS_VERBOSE=$1
-}
-
 tests_init() {
-    _TESTS_DIR="$(mktemp -t -d tests.XXXX)"
+    tests_dir="$(mktemp -t -d tests.XXXX)"
 
-    mkdir $_TESTS_DIR/bin
+    /bin/mkdir $tests_dir/bin
 
-    _TESTS_STDERR="$_TESTS_DIR/stderr"
-    _TESTS_STDOUT="$_TESTS_DIR/stdout"
-    _TESTS_EXITCODE="$_TESTS_DIR/exitcode"
+    tests_stderr="$tests_dir/.stderr"
+    tests_stdout="$tests_dir/.stdout"
+    tests_exitcode="$tests_dir/.exitcode"
+    tests_out="$tests_dir/.eval"
 
-    tests_debug "new test session"
+    tests:debug "{BEGIN} TEST SESSION"
 }
 
 tests_cleanup() {
-    tests_debug "$_TESTS_DIR" "cleanup test session"
+    tests:debug "{END} TEST SESSION"
 
-    test ! -e "$_TESTS_DIR/_failed"
+    test ! -e "$tests_dir/.failed"
     local success=$?
 
-    for bg_dir in $_TESTS_DIR/.bg/*; do
+    for bg_dir in $tests_dir/.bg/*; do
         if ! test -d $bg_dir; then
             continue
         fi
@@ -620,30 +806,32 @@ tests_cleanup() {
             local bg_stderr=$(cat $bg_dir/stderr)
 
 
-            tests_debug "background task #$bg_id cmd:"
-            tests_debug "# $bg_cmd"
+            tests:debug "background task #$bg_id cmd:"
+            tests:debug "# $bg_cmd"
 
             if [[ "$bg_stdout" == "" ]]; then
-                tests_debug "background task #$bg_id stdout is empty"
+                tests:debug "background task #$bg_id stdout is empty"
             else
-                tests_debug "background task #$bg_id stdout:"
+                tests:debug "background task #$bg_id stdout:"
                 tests_indent <<< "$bg_stdout"
             fi
 
             if [[ "$bg_stderr" == "" ]]; then
-                tests_debug "background task #$bg_id stderr is empty"
+                tests:debug "background task #$bg_id stderr is empty"
             else
-                tests_debug "background task #$bg_id stderr:"
+                tests:debug "background task #$bg_id stderr:"
                 tests_indent <<< "$bg_stderr"
             fi
         fi
 
-        tests_stop_background $bg_id
+        tests:stop-background $bg_id
     done
 
     if [ $success -eq 0 ]; then
-        rm -rf "$_TESTS_DIR"
+        rm -rf "$tests_dir"
     fi
+
+    tests_dir=""
 
     return $success
 }
@@ -652,36 +840,184 @@ tests_interrupt() {
     exit 88
 }
 
-tests_copy() {
-    tests_debug "cp -r \"$_TESTS_CASE_DIR/$1\" $_TESTS_DIR"
-    cp -r "$_TESTS_CASE_DIR/$1" $_TESTS_DIR
+tests_make_assertion() {
+    test "$1" $tests_assert_operation "$2"
+    return $?
 }
 
 tests_inc_asserts_count() {
-    local count=$(cat $_TESTS_DIR/_asserts)
-    echo $(($count+1)) > $_TESTS_DIR/_asserts
+    local count=$(cat $tests_dir/.asserts)
+    echo $(($count+1)) > $tests_dir/.asserts
 }
 
-tests_source() {
-    tests_copy "$1"
+tests_print_docs() {
+    parser='# start of awk code {{{
 
-    local source_name=$(basename $1)
-    tests_debug "source $source_name (begin)"
-    source "$source_name"
-    tests_debug "source $source_name (end)"
+    BEGIN {
+        if (! style) {
+            style = "github"
+        }
+
+        styles["github", "h1", "from"] = ".*"
+        styles["github", "h1", "to"] = "## &"
+
+        styles["github", "h2", "from"] = ".*"
+        styles["github", "h2", "to"] = "### &"
+
+        styles["github", "h3", "from"] = ".*"
+        styles["github", "h3", "to"] = "#### &"
+
+        styles["github", "code", "from"] = ".*"
+        styles["github", "code", "to"] = "```&"
+
+        styles["github", "/code", "to"] = "```"
+
+        styles["github", "argN", "from"] = "^(\\$[0-9]) (\\S+)"
+        styles["github", "argN", "to"] = "**\\1** (\\2):"
+
+        styles["github", "arg@", "from"] = "^\\$@ (\\S+)"
+        styles["github", "arg@", "to"] = "**...** (\\1):"
+
+        styles["github", "li", "from"] = ".*"
+        styles["github", "li", "to"] = "* &"
+
+        styles["github", "i", "from"] = ".*"
+        styles["github", "i", "to"] = "_&_"
+
+        styles["github", "anchor", "from"] = ".*"
+        styles["github", "anchor", "to"] = "[&](#&)"
+
+        styles["github", "exitcode", "from"] = "([0-9]) (.*)"
+        styles["github", "exitcode", "to"] = "**\\1**: \\2"
+    }
+
+    function render(type, text) {
+        return gensub( \
+            styles[style, type, "from"],
+            styles[style, type, "to"],
+            "g",
+            text \
+        )
+    }
+
+    /^# @description/ {
+        in_description = 1
+        in_example = 0
+
+        has_example = 0
+        has_args = 0
+        has_exitcode = 0
+        has_echo = 0
+
+        docblock = ""
+    }
+
+    in_description {
+        if (/^[^#]|^# @[^d]/) {
+            in_description = 0
+        } else {
+            sub(/^# @description /, "")
+            sub(/^# /, "")
+            sub(/^#$/, "")
+
+            if ($0) {
+                $0 = $0 "\n"
+            }
+
+            docblock = docblock $0
+        }
+    }
+
+    in_example {
+        if (! /^#[ ]{3}/) {
+            in_example = 0
+
+            docblock = docblock "\n" render("/code") "\n"
+        } else {
+            sub(/^#[ ]{3}/, "")
+
+            docblock = docblock "\n" $0
+        }
+    }
+
+    /^# @example/ {
+        in_example = 1
+
+        docblock = docblock "\n" render("h3", "Example")
+        docblock = docblock "\n\n" render("code", "bash")
+    }
+
+    /^# @arg/ {
+        if (!has_args) {
+            has_args = 1
+
+            docblock = docblock "\n" render("h2", "Arguments") "\n\n"
+        }
+
+        sub(/^# @arg /, "")
+
+        $0 = render("argN", $0)
+        $0 = render("arg@", $0)
+
+        docblock = docblock render("li", $0) "\n"
+    }
+
+    /^# @noargs/ {
+        docblock = docblock "\n" render("i", "Function has no arguments.") "\n"
+    }
+
+    /^# @exitcode/ {
+        if (!has_exitcode) {
+            has_exitcode = 1
+
+            docblock = docblock "\n" render("h2", "Exit codes") "\n\n"
+        }
+
+        sub(/^# @exitcode /, "")
+
+        $0 = render("exitcode", $0)
+
+        docblock = docblock render("li", $0) "\n"
+    }
+
+    /^# @see/ {
+        sub(/# @see /, "")
+
+        $0 = render("anchor", $0)
+        $0 = render("li", $0)
+
+        docblock = docblock "\n" render("h3", "See also") "\n\n" $0 "\n"
+    }
+
+    /^tests:[a-zA-Z0-9_-]+\(\)/ && docblock != "" {
+        print render("h1", $1) "\n\n" docblock
+
+        docblock = ""
+    }
+
+    # }}} end of awk code'
+
+    awk "$parser" "$(basename $0)"
 }
 
 if [ "$(basename $0)" == "tests.sh" ]; then
-    while getopts "hAO:v" arg; do
+    while getopts "hid:AOv" arg ${@:--h}; do
         case $arg in
+            d)
+                builtin cd "$OPTARG"
+                ;;
             A)
                 tests_run_all
                 ;;
             O)
-                tests_run_one "$OPTARG"
+                tests:set-verbose 4
+                tests_run_one "${@:$OPTIND:1}"
                 ;;
             v)
-                _TESTS_VERBOSE=$(($_TESTS_VERBOSE+1))
+                tests_verbose=$(($tests_verbose+1))
+                ;;
+            i)
+                tests_print_docs
                 ;;
             *)
                 cat <<EOF
@@ -692,15 +1028,21 @@ they are treated as testcases.
 
 Usage:
     tests.sh -h | ---help
-    tests.sh [-v] -A
-    tests.sh -O <name>
+    tests.sh [-v] [-d <dir>] -A
+    tests.sh [-v] [-d <dir>] -O [<name>]
+    tests.sh -i
 
 Options:
     -h | --help  Show this help.
     -A           Run all testcases in current directory.
-    -O <name>    Run specified testcase only.
+    -O <name>    Run specified testcase only. If no testcase specified, last failed
+                 testcase will be ran.
+    -d <dir>     Change directory to specified before running testcases.
     -v           Verbosity. Flag can be specified several times.
+    -i           Pretty-prints documentation for public API in markdown format.
 EOF
+
+                exit 2
                 ;;
         esac
     done
