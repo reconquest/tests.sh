@@ -1178,6 +1178,7 @@ Options:
     -O <name>    Run specified testcase only. If no testcase specified, last failed
                  testcase will be ran.
     -d <dir>     Change directory to specified before running testcases.
+                 [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
     -i           Pretty-prints documentation for public API in markdown format.
 EOF
