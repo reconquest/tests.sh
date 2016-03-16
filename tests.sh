@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -u
+
 # Public API Functions {{{
 
 # @description Make all functions from tests.sh available without 'tests:'
@@ -651,7 +653,7 @@ tests:set-verbose() {
 #
 # @arg $1 filename Filename to copy.
 tests:cp() {
-    local args=()
+    local args=(dummy)
     local last_arg=""
 
     while [ $# -gt 0 ]; do
@@ -670,12 +672,12 @@ tests:cp() {
         shift
     done
 
-    tests:debug "cp ${args[@]} $tests_dir/$last_arg"
+    tests:debug "cp ${args[@]:1} $tests_dir/$last_arg"
 
     local stderr
-    stderr=$(/bin/cp ${args[@]} $tests_dir/$last_arg 2>&1)
+    stderr=$(/bin/cp ${args[@]:1} $tests_dir/$last_arg 2>&1)
     if [ $? -gt 0 ]; then
-        tests:debug "error copying files: cp ${args[@]} $tests_dir/$last_arg:"
+        tests:debug "error copying: cp ${args[@]:1} $tests_dir/$last_arg:"
         tests_indent <<< "$stderr"
         tests_interrupt
     fi
