@@ -485,7 +485,9 @@ tests:ensure() {
 #
 # @arg $1 string Directory name.
 tests:mkdir() {
-    tests:eval /bin/mkdir -p $tests_dir/$1
+    # prepend to any non-flag argument $tests_dir prefix
+    tests:eval /bin/mkdir \
+        $(sed -re "s#(^|\\s)([^-])#\\1$tests_dir/\\2#g" <<< "${@}")
 }
 
 # @description Changes working directory to the specified temporary directory,
