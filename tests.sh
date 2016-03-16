@@ -7,7 +7,10 @@
 #
 # @noargs
 tests:import-namespace() {
-    builtin eval $(declare -F | grep -F -- '-f tests:' | cut -d: -f2 |
+    builtin eval $(
+        declare -F |
+        grep -F -- '-f tests:' |
+        cut -d: -f2 |
         sed -re's/.*/&() { tests:& "${@}"; };/'
     )
 }
