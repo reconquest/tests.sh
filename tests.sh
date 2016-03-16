@@ -270,10 +270,7 @@ tests:put-string() {
     local file="$1"
     local content="$2"
 
-    tests:debug "writing a file $file with content:"
-    echo "$content" | tests_indent
-
-    echo "$content" > "$file"
+    tests:put "$file" <<< "$content"
 }
 
 # @description Put stdin into temporary file with given name.
@@ -287,14 +284,21 @@ tests:put-string() {
 #
 #   tests:assert-no-diff xxx "$(echo -e '1\n2\n3')" # test will pass
 #
-# @arg $1 filename Filename (non-temporary).
+# @arg $1 filename Temporary file name.
 tests:put() {
-    local file="$1"
+    local file="$tests_dir/$1"
 
-    cat > "$tests_dir/$file"
+    local stderr
+    stderr=$(cat 2>&1 > $file)
+    if [ $? -gt 0 ]; then
+        tests:debug "error writing file:"
+        tests_indent <<< "$stderr"
+        tests_interrupt
+    fi
 
     tests:debug "wrote a file $file with content:"
-    cat $file | tests_indent
+    tests_indent < $file
+
 }
 
 # @description Asserts that stdout of last evaluated command matches given
@@ -486,8 +490,18 @@ tests:ensure() {
 # @arg $1 string Directory name.
 tests:mkdir() {
     # prepend to any non-flag argument $tests_dir prefix
-    tests:eval /bin/mkdir \
-        $(sed -re "s#(^|\\s)([^-])#\\1$tests_dir/\\2#g" <<< "${@}")
+
+    tests:debug "making directories in $tests_dir: mkdir ${@}"
+
+    local stderr
+    stderr=$(
+        /bin/mkdir \
+            $(sed -re "s#(^|\\s)([^-])#\\1$tests_dir/\\2#g" <<< "${@}"))
+    if [ $? -gt 0 ]; then
+        tests:debug "error making directories ${@}:"
+        tests_indent <<< "$stderr"
+        tests_interrupt
+    fi
 }
 
 # @description Changes working directory to the specified temporary directory,
@@ -629,22 +643,40 @@ tests:set-verbose() {
     tests_verbose=$1
 }
 
-# @description Recursively copy specified file or directory from the testcases
+# @description Copy specified file or directory from the testcases
 # dir to the temporary test directory.
 #
 # @arg $1 filename Filename to copy.
 tests:cp() {
-    local files=($tests_case_dir/$1)
-    shift
+    local args=()
+    local last_arg=""
 
-    while [ $# -gt 1 ]; do
-        files=($files $tests_case_dir/$1)
+    while [ $# -gt 0 ]; do
+        if [ "$last_arg" ]; then
+            args=($args $tests_case_dir/$last_arg)
+        fi
+
+        last_arg=""
+
+        if grep -q '^-' <<< "$1"; then
+            args=($args $1)
+        else
+            last_arg=$1
+        fi
 
         shift
     done
 
-    tests:debug "cp -r ${files[@]} $tests_dir/$1"
-    /bin/cp -r ${files[@]} $tests_dir/$1
+    tests:debug "cp ${args[@]} $tests_dir/$last_arg"
+
+    local stderr
+    stderr=$(/bin/cp ${args[@]} $tests_dir/$last_arg 2>&1)
+    if [ $? -gt 0 ]; then
+        tests:debug "error copying files: cp ${args[@]} $tests_dir/$last_arg:"
+        tests_indent <<< "$stderr"
+        tests_interrupt
+    fi
+
 }
 
 # @description Copy specified file from testcases to the temporary test
@@ -652,7 +684,7 @@ tests:cp() {
 #
 # @arg $1 filename Filename to copy and source.
 tests:source() {
-    tests:cp "$1"
+    tests:cp "$1" .
 
     local source_name=$(basename $1)
     tests:debug "{BEGIN} source $source_name"
