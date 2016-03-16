@@ -26,7 +26,7 @@ tests:import-namespace() {
 #
 # @stdout Path to temp dir, e.g, /tmp/tests.XXXX
 tests:get-tmp-dir() {
-    if [[ "$tests_dir" == "" ]]; then
+    if [ -n "$tests_dir" ]; then
         tests:debug "test session not initialized"
         tests_interrupt
     fi
