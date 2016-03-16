@@ -121,7 +121,8 @@ tests:match-re() {
     return $?
 }
 
-# @description Same, as 'tests:match-re', but abort testing if comparison failed.
+# @description Same as 'tests:match-re', but abort testing if comparison
+# failed.
 #
 # @example
 #   tests:eval echo aaa
