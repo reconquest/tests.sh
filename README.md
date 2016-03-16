@@ -79,6 +79,10 @@ It can be used as a workspace for the testcase.
 ls $(tests:get-tmp-dir)
 ```
 
+### Output on stdout
+
+* Path to temp dir, e.g, /tmp/tests.XXXX
+
 ## tests:assert-equals()
 
 Asserts, that first string arg is equals to second.
@@ -198,6 +202,10 @@ tests:eval echo 123
 cat $(tests:get-stdout) # will echo 123
 ```
 
+### Output on stdout
+
+* Filename containing stdout.
+
 ## tests:get-stderr()
 
 Returns file containing stderr of last command.
@@ -208,6 +216,10 @@ Returns file containing stderr of last command.
 tests:eval echo 123 '1>&2' # note quotes
 cat $(tests:get-stderr) # will echo 123
 ```
+
+### Output on stdout
+
+* Filename containing stderr.
 
 ## tests:assert-no-diff-blank()
 
@@ -273,7 +285,7 @@ EOF
 
 ### Arguments
 
-* **$1** (filename): Filename (non-temporary).
+* **$1** (filename): Temporary file name.
 
 ## tests:assert-stdout-re()
 
@@ -456,6 +468,10 @@ be printed.
 
 * **...** (string): Command to start.
 
+### Output on stdout
+
+* Unique identifier of running backout process.
+
 ## tests:get-background-pid()
 
 Returns pid of specified background process.
@@ -463,6 +479,10 @@ Returns pid of specified background process.
 ### Arguments
 
 * **$1** (string): Process ID, returned from 'tests:run-background'.
+
+### Output on stdout
+
+* Pid of background process.
 
 ## tests:get-background-stdout()
 
@@ -472,6 +492,10 @@ Returns stdout of specified background process.
 
 * **$1** (string): Process ID, returned from 'tests:run-background'.
 
+### Output on stdout
+
+* Stdout from background process.
+
 ## tests:background-stderr()
 
 Returns stderr of specified background process.
@@ -479,6 +503,10 @@ Returns stderr of specified background process.
 ### Arguments
 
 * **$1** (string): Process ID, returned from 'tests:run-background'.
+
+### Output on stdout
+
+* Stderr from background process.
 
 ## tests:stop-background()
 
@@ -510,7 +538,7 @@ Sets verbosity of testcase output.
 
 ## tests:cp()
 
-Recursively copy specified file or directory from the testcases
+Copy specified file or directory from the testcases
 dir to the temporary test directory.
 
 ### Arguments

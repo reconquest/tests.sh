@@ -24,7 +24,7 @@ tests:import-namespace() {
 # @example
 #   ls $(tests:get-tmp-dir)
 #
-# @echo Path to temp dir, e.g, /tmp/tests.XXXX
+# @stdout Path to temp dir, e.g, /tmp/tests.XXXX
 tests:get-tmp-dir() {
     if [[ "$tests_dir" == "" ]]; then
         tests:debug "test session not initialized"
@@ -209,7 +209,7 @@ tests:assert-no-diff() {
 #   tests:eval echo 123
 #   cat $(tests:get-stdout) # will echo 123
 #
-# @echo Filename containing stdout.
+# @stdout Filename containing stdout.
 tests:get-stdout() {
     echo $tests_stdout
 }
@@ -220,7 +220,7 @@ tests:get-stdout() {
 #   tests:eval echo 123 '1>&2' # note quotes
 #   cat $(tests:get-stderr) # will echo 123
 #
-# @echo Filename containing stderr.
+# @stdout Filename containing stderr.
 tests:get-stderr() {
     echo $tests_stderr
 }
@@ -526,7 +526,7 @@ tests:cd-tmp-dir() {
 #
 # @arg $@ string Command to start.
 #
-# @echo Unique identifier of running backout process.
+# @stdout Unique identifier of running backout process.
 tests:run-background() {
     local cmd="$@"
 
@@ -568,7 +568,7 @@ tests:run-background() {
 #
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 #
-# @echo Pid of background process.
+# @stdout Pid of background process.
 tests:get-background-pid() {
     cat "$tests_dir/.bg/$1/pid"
 }
@@ -577,7 +577,7 @@ tests:get-background-pid() {
 #
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 #
-# @echo Stdout from background process.
+# @stdout Stdout from background process.
 tests:get-background-stdout() {
     echo "$tests_dir/.bg/$1/stdout"
 }
@@ -586,7 +586,7 @@ tests:get-background-stdout() {
 #
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 #
-# @echo Stderr from background process.
+# @stdout Stderr from background process.
 tests:background-stderr() {
     echo "$tests_dir/.bg/$1/stderr"
 }
@@ -1052,7 +1052,7 @@ tests_print_docs() {
         has_example = 0
         has_args = 0
         has_exitcode = 0
-        has_echo = 0
+        has_stdout = 0
 
         docblock = ""
     }
@@ -1132,6 +1132,15 @@ tests_print_docs() {
         $0 = render("li", $0)
 
         docblock = docblock "\n" render("h3", "See also") "\n\n" $0 "\n"
+    }
+
+    /^# @stdout/ {
+        has_stdout = 1
+
+        sub(/^# @stdout /, "")
+
+        docblock = docblock "\n" render("h2", "Output on stdout")
+        docblock = docblock "\n\n" render("li", $0) "\n"
     }
 
     /^tests:[a-zA-Z0-9_-]+\(\)/ && docblock != "" {
