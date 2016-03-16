@@ -3,21 +3,30 @@ tests.sh
 
 tests.sh --- simple test library for testing commands.
 
-tests.sh expected to find files named `*.test.sh` in current directory, and
-they are treated as testcases.
+tests.sh expected to find files named `*.test.sh` in the directory, provided by
+`-d` flag, and they are treated as testcases.
 
 # Synopsis
 ```
+tests.sh --- simple test library for testing commands.
+
+tests.sh expected to find files named *.test.sh in current directory, and
+they are treated as testcases.
+
 Usage:
     tests.sh -h | ---help
-    tests.sh [-v] -A
-    tests.sh -O <name>
+    tests.sh [-v] [-d <dir>] -A
+    tests.sh [-v] [-d <dir>] -O [<name>]
+    tests.sh -i
 
 Options:
     -h | --help  Show this help.
     -A           Run all testcases in current directory.
-    -O <name>    Run specified testcase only.
+    -O <name>    Run specified testcase only. If no testcase specified, last failed
+                 testcase will be ran.
+    -d <dir>     Change directory to specified before running testcases.
     -v           Verbosity. Flag can be specified several times.
+    -i           Pretty-prints documentation for public API in markdown format.
 ```
 
 ## Usage example
@@ -38,7 +47,19 @@ Options:
 5. Run one testcase using: `./tests.sh -d tests/ -O <test-case-name>.test.sh`;
 6. Run last failed testcase using: `./test.sh -d tests -O`;
 
-# Documentation
+## Set ups
+
+Two type of set up scripts are available: global and local.
+
+Global set up script should be named `global.setup.sh` and be located in the
+same directory as testcases. It will be sourced once before all testcases began
+to execute. Useful example of using global testcase is compiling program.
+
+Local set up script should be named `local.setup.sh` and be located in the
+same directory as testcases. It will be sources every time before each
+testcase.
+
+# Reference
 
 ## tests:import-namespace()
 
@@ -62,6 +83,12 @@ ls $(tests:get-tmp-dir)
 
 Asserts, that first string arg is equals to second.
 
+#### Example
+
+```bash
+tests:assert-equals 1 2 # fails
+```
+
 ### Arguments
 
 * **$1** (string): Expected string.
@@ -72,6 +99,13 @@ Asserts, that first string arg is equals to second.
 Asserts, that last evaluated command's stdout contains given
 string.
 
+#### Example
+
+```bash
+tests:eval echo 123
+tests:assert-stdout 123
+```
+
 ### Arguments
 
 * **$1** (string): Expected stdout.
@@ -81,6 +115,13 @@ string.
 Asserts, that last evaluated command's stderr contains given
 string.
 
+#### Example
+
+```bash
+tests:eval echo 123 '1>&2' # note quoting
+tests:assert-stderr 123
+```
+
 ### Arguments
 
 * **$1** (string): Expected stderr.
@@ -89,6 +130,16 @@ string.
 
 Compares, that last evaluated command output (stdout, stderr) or
 file contents matches regexp.
+
+#### Example
+
+```bash
+tests:eval echo aaa
+tests:match-re stdout a.a
+echo $? # 0
+tests:match-re stdout a.b
+echo $? # 1
+```
 
 ### Arguments
 
@@ -104,6 +155,14 @@ file contents matches regexp.
 
 Same, as 'tests:match-re', but abort testing if comparison failed.
 
+#### Example
+
+```bash
+tests:eval echo aaa
+tests:assert-re stdout a.a
+tests:assert-re stdout a.b # test fails there
+```
+
 #### See also
 
 * [tests:match-re](#tests:match-re)
@@ -113,6 +172,14 @@ Same, as 'tests:match-re', but abort testing if comparison failed.
 Asserts, that there are no diff on the last command output
 (stderr or stdout), or on string or on specified file with specified string
 or file.
+
+#### Example
+
+```bash
+tests:eval echo -e '1\n2'
+tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
+tests:assert-no-diff stdout "$(echo -e '1\n3')" # test will fail
+```
 
 ### Arguments
 
@@ -124,14 +191,36 @@ or file.
 
 Returns file containing stdout of last command.
 
+#### Example
+
+```bash
+tests:eval echo 123
+cat $(tests:get-stdout) # will echo 123
+```
+
 ## tests:get-stderr()
 
 Returns file containing stderr of last command.
+
+#### Example
+
+```bash
+tests:eval echo 123 '1>&2' # note quotes
+cat $(tests:get-stderr) # will echo 123
+```
 
 ## tests:assert-no-diff-blank()
 
 Same as 'tests:assert-diff', but ignore changes whose lines are
 all blank.
+
+#### Example
+
+```bash
+tests:eval echo -e '1\n2'
+tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
+tests:assert-no-diff stdout "$(echo -e '1\n\n2')" # test will pass
+```
 
 #### See also
 
@@ -142,6 +231,13 @@ all blank.
 Same, as shell 'test' function, but asserts, that exit code is
 zero.
 
+#### Example
+
+```bash
+tests:assert-test 1 -eq 1
+tests:assert-test 1 -eq 2 # test will fail
+```
+
 ### Arguments
 
 * **...** (Arguments): for 'test' function.
@@ -149,6 +245,12 @@ zero.
 ## tests:put-string()
 
 Put specified contents into temporary file with given name.
+
+#### Example
+
+```bash
+tests:put-string xxx "lala"
+```
 
 ### Arguments
 
@@ -159,6 +261,16 @@ Put specified contents into temporary file with given name.
 
 Put stdin into temporary file with given name.
 
+#### Example
+
+```bash
+tests:put xxx <<EOF
+1
+2
+3
+EOF
+```
+
 ### Arguments
 
 * **$1** (filename): Filename (non-temporary).
@@ -167,6 +279,12 @@ Put stdin into temporary file with given name.
 
 Asserts that stdout of last evaluated command matches given
 regexp.
+
+#### Example
+
+```bash
+tests:eval echo 123
+```
 
 ### Arguments
 
@@ -177,6 +295,12 @@ regexp.
 Asserts as 'tests:assert-stdout-re', but stderr used instead
 of stdout.
 
+#### Example
+
+```bash
+tests:eval echo 123 '1>&2' # note quotes
+```
+
 ### Arguments
 
 * **$1** (regexp): Regexp, same as in grep.
@@ -185,6 +309,13 @@ of stdout.
 
 Asserts that last evaluated command exit status is zero.
 
+#### Example
+
+```bash
+tests:eval true
+tests:assert-success
+```
+
 _Function has no arguments._
 
 ## tests:assert-fail()
@@ -192,12 +323,42 @@ _Function has no arguments._
 Asserts that last evaluated command exit status is not zero.
 Basically, alias for `test:not tests:assert-success`.
 
+#### Example
+
+```bash
+tests:eval false
+tests:assert-fail
+```
+
 _Function has no arguments._
 
 ## tests:assert-exitcode()
 
 Asserts that exit code of last evaluated command equals to
 specified value.
+
+#### Example
+
+```bash
+tests:eval false
+tests:assert-exitcode 1
+```
+
+### Arguments
+
+* **$1** (int): Expected exit code.
+
+## tests:not()
+
+Negates passed assertion.
+
+#### Example
+
+```bash
+tests:eval false
+tests:assert-fail
+tests:not tests:assert-success
+```
 
 ### Arguments
 
@@ -216,6 +377,12 @@ for debug purposes.
 
 Print specified string in the debug log.
 
+#### Example
+
+```bash
+tests:debug "hello from debug" # will shown only in verbose mode
+```
+
 ### Arguments
 
 * **...** (any): String to echo.
@@ -232,6 +399,15 @@ Changes working directory to specified directory.
 
 Evaluates specified string via shell 'eval'.
 
+#### Example
+
+```bash
+tests:eval echo 123 "# i'm comment"
+tests:eval echo 123 \# i\'m comment
+tests:eval echo 567 '1>&2' # redirect to stderr
+tests:eval echo 567 1>\&2' # same
+```
+
 ### Arguments
 
 * **...** (string): String to evaluate.
@@ -239,6 +415,13 @@ Evaluates specified string via shell 'eval'.
 ## tests:ensure()
 
 Eval specified command and assert, that it has zero exitcode.
+
+#### Example
+
+```bash
+tests:esnure true # will pass
+tests:esnure false # will fail
+```
 
 ### Arguments
 

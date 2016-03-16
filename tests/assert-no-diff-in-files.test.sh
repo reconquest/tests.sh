@@ -11,9 +11,9 @@ tests:put multiline-file-b <<EOF2
 EOF2
 
 tests:assert-no-diff multiline-file-a multiline-file-a
-tests:not tests:assert-no-diff multiline-file-b multiline-file-b
+tests:not tests:assert-no-diff multiline-file-a multiline-file-b
 EOF
 
 ensure tests.sh -d testcases -A
 
-assert-stdout "1 tests (4 assertions) done successfully!"
+assert-stdout "1 tests (2 assertions) done successfully!"

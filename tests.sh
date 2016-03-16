@@ -31,6 +31,9 @@ tests:get-tmp-dir() {
 
 # @description Asserts, that first string arg is equals to second.
 #
+# @example
+#   tests:assert-equals 1 2 # fails
+#
 # @arg $1 string Expected string.
 # @arg $2 string Actual value.
 tests:assert-equals() {
@@ -51,6 +54,10 @@ tests:assert-equals() {
 # @description Asserts, that last evaluated command's stdout contains given
 # string.
 #
+# @example
+#   tests:eval echo 123
+#   tests:assert-stdout 123
+#
 # @arg $1 string Expected stdout.
 tests:assert-stdout() {
     local expected="$1"
@@ -62,6 +69,10 @@ tests:assert-stdout() {
 # @description Asserts, that last evaluated command's stderr contains given
 # string.
 #
+# @example
+#   tests:eval echo 123 '1>&2' # note quoting
+#   tests:assert-stderr 123
+#
 # @arg $1 string Expected stderr.
 tests:assert-stderr() {
     local expected="$1"
@@ -72,6 +83,13 @@ tests:assert-stderr() {
 
 # @description Compares, that last evaluated command output (stdout, stderr) or
 # file contents matches regexp.
+#
+# @example
+#   tests:eval echo aaa
+#   tests:match-re stdout a.a
+#   echo $? # 0
+#   tests:match-re stdout a.b
+#   echo $? # 1
 #
 # @arg $1 'stdout'|'stderr'|filename If 'stdout' or 'stderr' is used, use
 # last command's stream as actual value. If filename is specified, then use
@@ -100,6 +118,11 @@ tests:match-re() {
 
 # @description Same, as 'tests:match-re', but abort testing if comparison failed.
 #
+# @example
+#   tests:eval echo aaa
+#   tests:assert-re stdout a.a
+#   tests:assert-re stdout a.b # test fails there
+#
 # @see tests:match-re
 tests:assert-re() {
     local target="$1"
@@ -126,6 +149,11 @@ tests:assert-re() {
 # @description Asserts, that there are no diff on the last command output
 # (stderr or stdout), or on string or on specified file with specified string
 # or file.
+#
+# @example
+#   tests:eval echo -e '1\n2'
+#   tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
+#   tests:assert-no-diff stdout "$(echo -e '1\n3')" # test will fail
 #
 # @arg $1 'stdout'|'stderr'|string|filename Actual value.
 # @arg $2 string|filename Expected value.
@@ -172,12 +200,20 @@ tests:assert-no-diff() {
 
 # @description Returns file containing stdout of last command.
 #
+# @example
+#   tests:eval echo 123
+#   cat $(tests:get-stdout) # will echo 123
+#
 # @echo Filename containing stdout.
 tests:get-stdout() {
     echo $tests_stdout
 }
 
 # @description Returns file containing stderr of last command.
+#
+# @example
+#   tests:eval echo 123 '1>&2' # note quotes
+#   cat $(tests:get-stderr) # will echo 123
 #
 # @echo Filename containing stderr.
 tests:get-stderr() {
@@ -187,6 +223,11 @@ tests:get-stderr() {
 # @description Same as 'tests:assert-diff', but ignore changes whose lines are
 # all blank.
 #
+# @example
+#   tests:eval echo -e '1\n2'
+#   tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
+#   tests:assert-no-diff stdout "$(echo -e '1\n\n2')" # test will pass
+#
 # @see tests:diff
 tests:assert-no-diff-blank() {
     tests:assert-no-diff "$1" "$2" "-B"
@@ -194,6 +235,10 @@ tests:assert-no-diff-blank() {
 
 # @description Same, as shell 'test' function, but asserts, that exit code is
 # zero.
+#
+# @example
+#   tests:assert-test 1 -eq 1
+#   tests:assert-test 1 -eq 2 # test will fail
 #
 # @arg $@ Arguments for 'test' function.
 tests:assert-test() {
@@ -214,6 +259,11 @@ tests:assert-test() {
 
 # @description Put specified contents into temporary file with given name.
 #
+# @example
+#   tests:put-string xxx "lala"
+#
+#   tests:assert-equals xxx "lala" # test will pass
+#
 # @arg $1 filename Temporary file name.
 # @arg $2 string Contents to put.
 tests:put-string() {
@@ -228,6 +278,15 @@ tests:put-string() {
 
 # @description Put stdin into temporary file with given name.
 #
+# @example
+#   tests:put xxx <<EOF
+#   1
+#   2
+#   3
+#   EOF
+#
+#   tests:assert-no-diff xxx "$(echo -e '1\n2\n3')" # test will pass
+#
 # @arg $1 filename Filename (non-temporary).
 tests:put() {
     local file="$1"
@@ -241,6 +300,11 @@ tests:put() {
 # @description Asserts that stdout of last evaluated command matches given
 # regexp.
 #
+# @example
+#   tests:eval echo 123
+#
+#   tests:assert-stdout-re 1.3 # will pass
+#
 # @arg $1 regexp Regexp, same as in grep.
 tests:assert-stdout-re() {
     tests:assert-re stdout "$@"
@@ -249,12 +313,21 @@ tests:assert-stdout-re() {
 # @description Asserts as 'tests:assert-stdout-re', but stderr used instead
 # of stdout.
 #
+# @example
+#   tests:eval echo 123 '1>&2' # note quotes
+#
+#   tests:assert-stderr-re 1.3 # will pass
+#
 # @arg $1 regexp Regexp, same as in grep.
 tests:assert-stderr-re() {
     tests:assert-re stderr "$@"
 }
 
 # @description Asserts that last evaluated command exit status is zero.
+#
+# @example
+#   tests:eval true
+#   tests:assert-success
 #
 # @noargs
 tests:assert-success() {
@@ -264,6 +337,10 @@ tests:assert-success() {
 # @description Asserts that last evaluated command exit status is not zero.
 # Basically, alias for `test:not tests:assert-success`.
 #
+# @example
+#   tests:eval false
+#   tests:assert-fail
+#
 # @noargs
 tests:assert-fail() {
     tests:not tests:assert-success
@@ -271,6 +348,10 @@ tests:assert-fail() {
 
 # @description Asserts that exit code of last evaluated command equals to
 # specified value.
+#
+# @example
+#   tests:eval false
+#   tests:assert-exitcode 1
 #
 # @arg $1 int Expected exit code.
 tests:assert-exitcode() {
@@ -289,6 +370,18 @@ tests:assert-exitcode() {
     tests_inc_asserts_count
 }
 
+# @description Negates passed assertion.
+#
+# @example
+#   tests:eval false
+#   tests:assert-fail
+#   tests:not tests:assert-success
+#
+#   tests:eval true
+#   tests:assert-success
+#   tests:not tests:assert-fail
+#
+# @arg $1 int Expected exit code.
 tests:not() {
     local old_exitcode=$?
 
@@ -314,6 +407,9 @@ tests:describe() {
 
 # @description Print specified string in the debug log.
 #
+# @example
+#   tests:debug "hello from debug" # will shown only in verbose mode
+#
 # @arg $@ any String to echo.
 tests:debug() {
     if [ $tests_verbose -lt 1 ]; then
@@ -338,27 +434,32 @@ tests:cd() {
 
 # @description Evaluates specified string via shell 'eval'.
 #
+# @example
+#   tests:eval echo 123 "# i'm comment"
+#   tests:eval echo 123 \# i\'m comment
+#   tests:eval echo 567 '1>&2' # redirect to stderr
+#   tests:eval echo 567 1>\&2' # same
+#
 # @arg $@ string String to evaluate.
 tests:eval() {
     tests:debug "$ $@"
 
     (
-        if [ $tests_verbose -lt 3 ]; then
-            tests_eval "$@" > $tests_stdout 2> $tests_stderr
-        fi
-
-        if [ $tests_verbose -eq 3 ]; then
-            tests_eval "$@" \
-                2> >(tee $tests_stderr) \
-                1> >(tee $tests_stdout > /dev/null)
-        fi
-
-        if [ $tests_verbose -gt 3 ]; then
-            tests_eval "$@" \
-                2> >(tee $tests_stderr) \
-                1> >(tee $tests_stdout)
-        fi
-
+        case $tests_verbose in
+            0|1)
+                tests_eval "$@" > $tests_stdout 2> $tests_stderr
+                ;;
+            2)
+                tests_eval "$@" \
+                    2> >(tee $tests_stderr) \
+                    1> >(tee $tests_stdout > /dev/null)
+                ;;
+            *)
+                tests_eval "$@" \
+                    2> >(tee $tests_stderr) \
+                    1> >(tee $tests_stdout)
+                ;;
+        esac
     ) > $tests_out 2>&1
 
     echo $? > $tests_exitcode
@@ -369,6 +470,10 @@ tests:eval() {
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
+#
+# @example
+#   tests:esnure true # will pass
+#   tests:esnure false # will fail
 #
 # @arg $@ any Command to evaluate.
 tests:ensure() {
@@ -699,6 +804,7 @@ tests_run_all() {
 
 tests_run_one() {
     local target="${1:-$(tests_get_last)}"
+
     local file="$(readlink -f $target)"
 
     tests:debug "TEST CASE $file"
@@ -752,7 +858,7 @@ tests_run_one() {
 
     tests_cleanup
 
-    if [ $? -gt 0 ]; then
+    if [ $result -ne 0 ]; then
         tests:debug "TEST FAILED $(readlink -f $file)"
         return 1
     else

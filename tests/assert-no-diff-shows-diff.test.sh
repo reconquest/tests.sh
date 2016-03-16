@@ -13,7 +13,6 @@ EOF2
 tests:assert-no-diff multiline-file-b multiline-file-a
 EOF
 
-
 eval tests.sh -d testcases -A
 
 assert-fail
