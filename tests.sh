@@ -812,6 +812,7 @@ tests_run_all() {
             tests_run_one "$file"
             local result=$?
             if [ $result -ne 0 ]; then
+                tests_set_last "$file"
                 exit $result
             fi
 
@@ -899,7 +900,7 @@ tests_get_last() {
 
 tests_set_last() {
     local testcase=$1
-    echo "$testcase" > .last-testcase
+    echo "$testcase" > $tests_case_dir/.last-testcase
 }
 
 tests_rm_last() {
