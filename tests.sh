@@ -45,13 +45,10 @@ tests:assert-equals() {
     local expected="$1"
     local actual="$2"
 
-    if ! tests_make_assertion "$expected" "$actual"; then
-        touch "$tests_dir/.failed"
-        tests:debug "expectation failed: two strings not equals"
-        tests:debug ">>> $expected$"
-        tests:debug "<<< $actual$"
-        tests_interrupt
-    fi
+    tests_make_assertion "$expected" "$actual" \
+        "two strings not equals" \
+        ">>> $expected$" \
+        "<<< $actual$"
 
     tests_inc_asserts_count
 }
@@ -138,16 +135,11 @@ tests:assert-re() {
     tests:match-re "$target" "$regexp"
     local result=$?
 
-    if ! tests_make_assertion $result 0; then
-        touch "$tests_dir/.failed"
-        tests:debug "expectation failed: regexp does not match"
-        tests:debug "*** match on: ${target}"
-        tests:debug ">>> ${regexp:-<empty regexp>}"
-        tests:debug "<<<"
-        cat $file | tests_indent
-
-        tests_interrupt
-    fi
+    tests_make_assertion $result 0 \
+        "regexp does not match" \
+        ">>> ${regexp:-<empty regexp>}" \
+        "<<< contents of ${target}:" \
+        "\n$(tests_indent < $file)"
 
     tests_inc_asserts_count
 }
@@ -194,12 +186,9 @@ tests:assert-no-diff() {
 
     local result=$?
 
-    if ! tests_make_assertion $result 0; then
-        touch "$tests_dir/.failed"
-        tests:debug "diff failed: "
-        tests_indent <<< "$diff"
-        tests_interrupt
-    fi
+    tests_make_assertion $result 0 \
+        "diff failed" \
+        "\n$(tests_indent <<< "$diff")"
 
     tests_inc_asserts_count
 }
@@ -369,13 +358,10 @@ tests:assert-exitcode() {
     local expected=$1
     shift
 
-    if ! tests_make_assertion "$expected" "$actual"; then
-        touch "$tests_dir/.failed"
-        tests:debug "exit code expectation failed"
-        tests:debug "actual exit code = $actual"
-        tests:debug "expected exit code $tests_last_assert_operation $expected"
-        tests_interrupt
-    fi
+    tests_make_assertion "$expected" "$actual" \
+        "exit code expectation failed" \
+        "actual exit code = $actual" \
+        "expected exit code $tests_last_assert_operation $expected"
 
     tests_inc_asserts_count
 }
@@ -427,9 +413,9 @@ tests:debug() {
     fi
 
     if [ "$tests_dir" ]; then
-        echo "# $tests_dir: $@"
+        echo -e "# $tests_dir: $@"
     else
-        echo "### $@"
+        echo -e "### $@"
     fi >&2
 }
 
@@ -988,7 +974,22 @@ tests_interrupt() {
 
 tests_make_assertion() {
     test "$1" $tests_assert_operation "$2"
-    return $?
+
+    local result=$?
+    shift 2
+
+    if [ $result -gt 0 ]; then
+        touch "$tests_dir/.failed"
+        tests:debug "expectation failed: $1"
+        shift
+        while [ $# -gt 0 ]; do
+            tests:debug "$1"
+
+            shift
+        done
+
+        tests_interrupt
+    fi
 }
 
 tests_inc_asserts_count() {

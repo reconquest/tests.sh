@@ -24,6 +24,6 @@ put expected.diff <<EOF
  3
 EOF
 
-sed -rne '/diff failed/,+7 { /@@/,$ p }' $(tests:get-stdout) | put actual.diff
+sed -rne '/diff failed/,+8 { /@@/,$ p }' $(tests:get-stdout) | put actual.diff
 
 assert-no-diff expected.diff actual.diff "-w"
