@@ -645,7 +645,7 @@ tests:cp() {
 
     while [ $# -gt 0 ]; do
         if [ "$last_arg" ]; then
-            args=($args $tests_case_dir/$last_arg)
+            args+=($tests_case_dir/$last_arg)
         fi
 
         last_arg=""
