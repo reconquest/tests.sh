@@ -1,6 +1,6 @@
 put testcases/mkdir-with-flags.test.sh <<EOF
-tests:mkdir a
-tests:mkdir -p a/b/c
+tests:mk-tmp-dir a
+tests:mk-tmp-dir -p a/b/c
 
 tests:assert-test -d a/b/c
 EOF
