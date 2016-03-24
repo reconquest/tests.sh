@@ -226,8 +226,8 @@ tests:get-stderr-file() {
 #
 # @example
 #   tests:eval echo -e '1\n2'
-#   tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
-#   tests:assert-no-diff stdout "$(echo -e '1\n\n2')" # test will pass
+#   tests:assert-no-diff-blank stdout "$(echo -e '1\n2')" # note quotes
+#   tests:assert-no-diff-blank stdout "$(echo -e '1\n\n2')" # test will pass
 #
 # @see tests:diff
 tests:assert-no-diff-blank() {
