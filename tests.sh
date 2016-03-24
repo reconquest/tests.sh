@@ -391,7 +391,7 @@ tests:not() {
     tests_assert_operation="!="
     tests_last_assert_operation="!="
 
-    builtin eval "${@}"
+    "${@}"
     tests_assert_operation="="
 }
 
@@ -712,6 +712,7 @@ tests_last_assert_operation="="
 # }}}
 
 tests_eval() {
+
     local cmd=()
     for i in "$@"; do
         case $i in
@@ -721,7 +722,7 @@ tests_eval() {
             *'<'*) cmd+=($i) ;;
             *'&')  cmd+=($i) ;;
             '|')   cmd+=($i) ;;
-            *)     cmd+=(\"$i\")
+            *)     cmd+=(\""$i"\")
         esac
     done
 
@@ -1011,17 +1012,17 @@ tests_raw_eval() {
 
         case $tests_verbose in
             0|1)
-                tests_eval "$@" \
+                tests_eval "${@}" \
                     > $tests_stdout \
                     2> $tests_stderr
                 ;;
             2)
-                tests_eval "$@" \
+                tests_eval "${@}" \
                     2> >(tee $tests_stderr) \
                     1> >(tee $tests_stdout > /dev/null)
                 ;;
             *)
-                tests_eval "$@" \
+                tests_eval "${@}" \
                     2> >(tee $tests_stderr) \
                     1> >(tee $tests_stdout)
                 ;;
