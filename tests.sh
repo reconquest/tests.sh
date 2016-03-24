@@ -234,7 +234,7 @@ tests:assert-no-diff-blank() {
     tests:assert-no-diff "$1" "$2" "-B"
 }
 
-# @description Same, as shell 'test' function, but asserts, that exit code is
+# @description Same as shell 'test' function, but asserts, that exit code is
 # zero.
 #
 # @example
