@@ -13,7 +13,6 @@ tests:eval false
 tests:not tests:assert-success
 EOF
 
-
 ensure tests.sh -d testcases -A
 
 assert-stdout '3 tests (3 assertions) done successfully!'

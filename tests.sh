@@ -203,10 +203,10 @@ tests:assert-no-diff() {
 #
 # @example
 #   tests:eval echo 123
-#   cat $(tests:get-stdout) # will echo 123
+#   cat $(tests:get-stdout-file) # will echo 123
 #
 # @stdout Filename containing stdout.
-tests:get-stdout() {
+tests:get-stdout-file() {
     echo $_tests_stdout
 }
 
@@ -217,7 +217,7 @@ tests:get-stdout() {
 #   cat $(tests:get-stderr) # will echo 123
 #
 # @stdout Filename containing stderr.
-tests:get-stderr() {
+tests:get-stderr-file() {
     echo $_tests_stderr
 }
 
@@ -446,7 +446,7 @@ tests:cd() {
 tests:eval() {
     tests:debug "$ $@"
 
-    if _tests_raw_eval "${@}"; then
+    if _tests_eval_and_capture_output "${@}"; then
         echo 0 > $_tests_exitcode
     else
         echo $? > $_tests_exitcode
@@ -778,10 +778,11 @@ _tests_run_all() {
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
             local pwd="$(pwd)"
+
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$file" > $stdout 2>&1; then
+            if _tests_run_one "$file" &> $stdout; then
                 result=0
             else
                 result=$?
@@ -815,6 +816,7 @@ _tests_run_all() {
 
             success=$((success+1))
         fi
+
         assertions_count=$(($assertions_count+$_tests_asserts))
     done
 
@@ -1014,7 +1016,7 @@ _tests_inc_asserts_count() {
     echo $(($count+1)) > $_tests_dir/.asserts
 }
 
-_tests_raw_eval() {
+_tests_eval_and_capture_output() {
     (
         set +euo pipefail
 
@@ -1025,14 +1027,26 @@ _tests_raw_eval() {
                     2> $_tests_stderr
                 ;;
             2)
-                _tests_eval "${@}" \
-                    2> >(tee $_tests_stderr) \
-                    1> >(tee $_tests_stdout > /dev/null)
+                # Process substitution will not work there, because
+                # it will be executed asyncronously.
+                #
+                # Consider: true > >(sleep 1; echo hello)
+                #
+                # `true` will exit no matter running sleep, and hello will
+                # be shown only after 1 second pass.
+                { _tests_eval "${@}" \
+                    | tee $_tests_stdout 1>&3; exit ${PIPESTATUS[0]}; } \
+                    2> $_tests_stderr 3>&1
                 ;;
             *)
-                _tests_eval "${@}" \
-                    2> >(tee $_tests_stderr) \
-                    1> >(tee $_tests_stdout)
+                # We need to return exitcode of _tests_eval, not tee, so
+                # we need to use PIPESTATUS[0] which will be equal to exitcode
+                # of _tests_eval.
+                #
+                # It's required, because -o pipefail is not set here.
+                { { _tests_eval "${@}" \
+                    | tee $_tests_stdout 1>&3; exit ${PIPESTATUS[0]}; } 2>&1 \
+                    | tee $_tests_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
                 ;;
         esac
     ) > $_tests_out 2>&1
@@ -1265,7 +1279,7 @@ __main__() {
 
                 for name in "$files"; do
                     if ! _tests_run_one "$name"; then
-                        break
+                        exit 1
                     fi
                 done
                 ;;
