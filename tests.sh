@@ -981,15 +981,11 @@ tests_interrupt() {
 
 tests_make_assertion() {
     local result
-    echo $tests_assert_operation
-    echo if test "$1" $tests_assert_operation "$2"
     if test "$1" $tests_assert_operation "$2"; then
         result=0
     else
         result=$?
     fi
-
-    echo $result
 
     shift 2
 
