@@ -1272,10 +1272,10 @@ __main__() {
                 if [ -z "$filemask" ]; then
                     local files=$(_tests_get_last)
                 else
-                    local files=$(eval echo \*$filemask\*.test.sh)
+                    local files=($(eval echo \*$filemask\*.test.sh))
                 fi
 
-                for name in "$files"; do
+                for name in "${files[@]}"; do
                     if ! _tests_run_one "$name"; then
                         exit 1
                     fi
