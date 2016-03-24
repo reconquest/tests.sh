@@ -397,14 +397,12 @@ tests:not() {
     _tests_assert_operation="="
 }
 
-# @description Evaluates given command and show it's output in the debug, used
-# for debug purposes.
+# @description Same as tests:debug(), but colorize output
+# for better vizibility.
 #
-# @arg $@ any Command to evaluate.
+# @arg $@ any String to output.
 tests:describe() {
-    tests:debug "this test decription:"
-
-    _tests_eval "$@" | _tests_indent
+    tests:debug "@@ \e[7;49;34m" ${@} "\e[0m"
 }
 
 # @description Print specified string in the debug log.
