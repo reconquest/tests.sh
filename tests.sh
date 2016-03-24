@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -u
+set -euo pipefail
 
 # Public API Functions {{{
 
@@ -114,8 +114,11 @@ tests:match-re() {
         file=$tests_stderr
     fi
 
-    grep -qP "$regexp" $file
-    return $?
+    if grep -qP "$regexp" $file; then
+        echo 0
+    else
+        echo $?
+    fi > $tests_exitcode
 }
 
 # @description Same as 'tests:match-re', but abort testing if comparison
@@ -133,7 +136,8 @@ tests:assert-re() {
     shift 2
 
     tests:match-re "$target" "$regexp"
-    local result=$?
+
+    local result=$(cat $tests_exitcode)
 
     tests_make_assertion $result 0 \
         "regexp does not match" \
@@ -180,11 +184,14 @@ tests:assert-no-diff() {
     fi
 
     local diff
-    diff=$(diff `echo $options` \
-        <(echo -e "$expected_content") \
-        <(echo -e "$actual_content"))
-
-    local result=$?
+    local result=0
+    if diff=$(diff `echo $options` \
+            <(echo -e "$expected_content") \
+            <(echo -e "$actual_content")); then
+        result=0
+    else
+        result=$?
+    fi
 
     tests_make_assertion $result 0 \
         "diff failed" \
@@ -240,8 +247,12 @@ tests:assert-test() {
     local args="$@"
 
     tests:debug "test $args"
-    test "$@"
-    local result=$?
+    local result
+    if test "$@"; then
+        result=0
+    else
+        result=$?
+    fi
 
     if [ $result -ne 0 ]; then
         touch "$tests_dir/.failed"
@@ -284,8 +295,7 @@ tests:put() {
     local file="$tests_dir/$1"
 
     local stderr
-    stderr=$(cat 2>&1 > $file)
-    if [ $? -gt 0 ]; then
+    if ! stderr=$(cat 2>&1 > $file); then
         tests:debug "error writing file:"
         tests_indent <<< "$stderr"
         tests_interrupt
@@ -354,7 +364,7 @@ tests:assert-fail() {
 #
 # @arg $1 int Expected exit code.
 tests:assert-exitcode() {
-    local actual=$?
+    local actual=$(cat $tests_exitcode)
     local expected=$1
     shift
 
@@ -383,9 +393,6 @@ tests:not() {
 
     tests_assert_operation="!="
     tests_last_assert_operation="!="
-
-    # preserving old exit code for possible tests:assert-success call
-    ( return $old_exitcode )
 
     builtin eval "${@}"
     tests_assert_operation="="
@@ -440,29 +447,13 @@ tests:cd() {
 tests:eval() {
     tests:debug "$ $@"
 
-    (
-        case $tests_verbose in
-            0|1)
-                tests_eval "$@" > $tests_stdout 2> $tests_stderr
-                ;;
-            2)
-                tests_eval "$@" \
-                    2> >(tee $tests_stderr) \
-                    1> >(tee $tests_stdout > /dev/null)
-                ;;
-            *)
-                tests_eval "$@" \
-                    2> >(tee $tests_stderr) \
-                    1> >(tee $tests_stdout)
-                ;;
-        esac
-    ) > $tests_out 2>&1
-
-    echo $? > $tests_exitcode
+    if tests_raw_eval "${@}"; then
+        echo 0 > $tests_exitcode
+    else
+        echo $? > $tests_exitcode
+    fi
 
     tests_indent < $tests_out
-
-    return $(cat $tests_exitcode)
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -486,10 +477,9 @@ tests:mkdir() {
     tests:debug "making directories in $tests_dir: mkdir ${@}"
 
     local stderr
-    stderr=$(
+    if ! stderr=$(
         /bin/mkdir \
-            $(sed -re "s#(^|\\s)([^-])#\\1$tests_dir/\\2#g" <<< "${@}"))
-    if [ $? -gt 0 ]; then
+            $(sed -re "s#(^|\\s)([^-])#\\1$tests_dir/\\2#g" <<< "${@}")); then
         tests:debug "error making directories ${@}:"
         tests_indent <<< "$stderr"
         tests_interrupt
@@ -538,9 +528,8 @@ tests:run-background() {
     builtin eval "( $cmd >$dir/stdout 2>$dir/stderr )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
-    local bg_pid=$(pgrep -f "$cmd")
-
-    if [ $? -ne 0 ]; then
+    local bg_pid
+    if ! bg_pid=$(pgrep -f "$cmd"); then
         tests:debug "background process does not started, interrupting test"
         tests_interrupt
     fi
@@ -662,8 +651,7 @@ tests:cp() {
     tests:debug "cp ${args[@]:1} $tests_dir/$last_arg"
 
     local stderr
-    stderr=$(/bin/cp ${args[@]:1} $tests_dir/$last_arg 2>&1)
-    if [ $? -gt 0 ]; then
+    if ! stderr=$(/bin/cp ${args[@]:1} $tests_dir/$last_arg 2>&1); then
         tests:debug "error copying: cp ${args[@]:1} $tests_dir/$last_arg:"
         tests_indent <<< "$stderr"
         tests_interrupt
@@ -754,8 +742,7 @@ tests_quote_re() {
 tests_quote_cmd() {
     local cmd=()
     for i in "$@"; do
-        grep -q "[' \"\$]" <<< "$i"
-        if [ $? -eq 0 ]; then
+        if grep -q "[' \"\$]" <<< "$i"; then
             cmd+=($(sed -r -e "s/['\"\$]/\\&/" -e "s/.*/'&'/" <<< "$i"))
         else
             cmd+=($i)
@@ -791,8 +778,12 @@ tests_run_all() {
             local pwd="$(pwd)"
             tests_asserts=0
 
-            tests_run_one "$file" > $stdout 2>&1
-            local result=$?
+            local result
+            if tests_run_one "$file" > $stdout 2>&1; then
+                result=0
+            else
+                result=$?
+            fi
 
             builtin cd "$pwd"
             if [ $result -eq 0 ]; then
@@ -809,8 +800,12 @@ tests_run_all() {
                 exit $result
             fi
         else
-            tests_run_one "$file"
-            local result=$?
+            local result
+            if tests_run_one "$file"; then
+                result=0
+            else
+                result=$?
+            fi
             if [ $result -ne 0 ]; then
                 tests_set_last "$file"
                 exit $result
@@ -850,6 +845,33 @@ tests_run_one() {
 
     tests_case_dir=$(dirname "$file")
 
+    local result
+    if tests_run_raw; then
+        result=0
+    else
+        result=$?
+    fi
+
+    tests_asserts=$(cat $tests_dir/.asserts)
+
+    if [[ $result -ne 0 && ! -f "$tests_dir/.failed" ]]; then
+        tests:debug "test exited with non-zero exit code"
+        tests:debug "exit code = $result"
+        touch "$tests_dir/.failed"
+    fi
+
+    tests_cleanup
+
+    if [ $result -ne 0 ]; then
+        tests:debug "TEST FAILED $(readlink -f $file)"
+        return 1
+    else
+        tests:debug "TEST PASSED $(readlink -f $file)"
+        return 0
+    fi
+}
+
+tests_run_raw() {
     (
         PATH="$tests_dir/bin:$PATH"
 
@@ -873,25 +895,6 @@ tests_run_one() {
 
         builtin source "$file"
     )
-    local result=$?
-
-    tests_asserts=$(cat $tests_dir/.asserts)
-
-    if [[ $result -ne 0 && ! -f "$tests_dir/.failed" ]]; then
-        tests:debug "test exited with non-zero exit code"
-        tests:debug "exit code = $result"
-        touch "$tests_dir/.failed"
-    fi
-
-    tests_cleanup
-
-    if [ $result -ne 0 ]; then
-        tests:debug "TEST FAILED $(readlink -f $file)"
-        return 1
-    else
-        tests:debug "TEST PASSED $(readlink -f $file)"
-        return 0
-    fi
 }
 
 tests_get_last() {
@@ -917,14 +920,21 @@ tests_init() {
     tests_exitcode="$tests_dir/.exitcode"
     tests_out="$tests_dir/.eval"
 
+    touch $tests_stderr
+    touch $tests_stdout
+    touch $tests_exitcode
+    touch $tests_out
+
     tests:debug "{BEGIN} TEST SESSION"
 }
 
 tests_cleanup() {
     tests:debug "{END} TEST SESSION"
 
-    test ! -e "$tests_dir/.failed"
-    local success=$?
+    local failed=""
+    if test -e "$tests_dir/.failed"; then
+        failed=1
+    fi
 
     for bg_dir in $tests_dir/.bg/*; do
         if ! test -d $bg_dir; then
@@ -933,7 +943,7 @@ tests_cleanup() {
 
         local bg_id=$(cat $bg_dir/id)
 
-        if [ $success -ne 0 ]; then
+        if [ $failed ]; then
             local bg_cmd=$(cat $bg_dir/cmd)
             local bg_stdout=$(cat $bg_dir/stdout)
             local bg_stderr=$(cat $bg_dir/stderr)
@@ -960,13 +970,9 @@ tests_cleanup() {
         tests:stop-background $bg_id
     done
 
-    if [ $success -eq 0 ]; then
-        rm -rf "$tests_dir"
-    fi
+    rm -rf "$tests_dir"
 
     tests_dir=""
-
-    return $success
 }
 
 tests_interrupt() {
@@ -974,9 +980,17 @@ tests_interrupt() {
 }
 
 tests_make_assertion() {
-    test "$1" $tests_assert_operation "$2"
+    local result
+    echo $tests_assert_operation
+    echo if test "$1" $tests_assert_operation "$2"
+    if test "$1" $tests_assert_operation "$2"; then
+        result=0
+    else
+        result=$?
+    fi
 
-    local result=$?
+    echo $result
+
     shift 2
 
     if [ $result -gt 0 ]; then
@@ -996,6 +1010,30 @@ tests_make_assertion() {
 tests_inc_asserts_count() {
     local count=$(cat $tests_dir/.asserts)
     echo $(($count+1)) > $tests_dir/.asserts
+}
+
+tests_raw_eval() {
+    (
+        set +e
+
+        case $tests_verbose in
+            0|1)
+                tests_eval "$@" \
+                    > $tests_stdout \
+                    2> $tests_stderr
+                ;;
+            2)
+                tests_eval "$@" \
+                    2> >(tee $tests_stderr) \
+                    1> >(tee $tests_stdout > /dev/null)
+                ;;
+            *)
+                tests_eval "$@" \
+                    2> >(tee $tests_stderr) \
+                    1> >(tee $tests_stdout)
+                ;;
+        esac
+    ) > $tests_out 2>&1
 }
 
 tests_print_docs() {
