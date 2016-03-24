@@ -98,9 +98,6 @@ tests:assert-stderr() {
 # contents of specified filename as actual contents.
 #
 # @arg $2 regexp Regexp to match, same as in grep.
-#
-# @exitcode 1 If comparison failed.
-# @exitcode 0 If contents equals.
 tests:match-re() {
     local target="$1"
     local regexp="$2"
