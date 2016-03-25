@@ -468,7 +468,7 @@ tests:ensure() {
 # @description Creates temporary directory.
 #
 # @arg $@ any Same as for mkdir command.
-tests:mk-tmp-dir() {
+tests:make-tmp-dir() {
     # prepend to any non-flag argument $_tests_dir prefix
 
     tests:debug "making directories in $_tests_dir: mkdir ${@}"
@@ -1264,6 +1264,8 @@ __main__() {
         case $arg in
             A)
                 _tests_run_all
+
+                exit $?
                 ;;
             O)
                 tests:set-verbose 4
@@ -1280,12 +1282,18 @@ __main__() {
                         exit 1
                     fi
                 done
+
+                exit $?
                 ;;
             h)
                 _tests_show_usage
+
+                exit $?
                 ;;
         esac
     done
+
+    _tests_show_usage
 }
 
 
