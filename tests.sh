@@ -625,7 +625,7 @@ tests:set-verbose() {
 # dir to the temporary test directory.
 #
 # @arg $@ any Same args, as for cp commmand.
-tests:grasp() {
+tests:clone() {
     local args=(dummy)
     local last_arg=""
 
@@ -664,7 +664,7 @@ tests:grasp() {
 tests:involve() {
     local source_name=$(basename $1)
     tests:debug "{BEGIN} source $source_name"
-    tests:grasp "$1" "${2:-.}"
+    tests:clone "$1" "${2:-.}"
 
     tests:debug "\$ source $source_name"
     builtin source "$source_name" >$_tests_out 2>&1

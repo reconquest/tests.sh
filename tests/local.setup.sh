@@ -1,5 +1,5 @@
 tests:import-namespace
 
-grasp ../tests.sh bin/
+clone ../tests.sh bin/
 
 mk-tmp-dir testcases
