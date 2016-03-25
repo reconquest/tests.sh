@@ -5,17 +5,19 @@ set -euo pipefail
 # Public API Functions {{{
 
 # @description Make all functions from tests.sh available without 'tests:'
-# prefix.
+# prefix. Prefix can be also user defined, like 't:'.
 #
-# @noargs
+# @arg $1 string Custom prefix for namespace functions.
 tests:import-namespace() {
+    local prefix="${1:-}"
+
     tests:debug "! importing namespace 'tests:'"
 
     builtin eval $(
         declare -F |
         grep -F -- '-f tests:' |
         cut -d: -f2 |
-        sed -re's/.*/&() { tests:& "${@}"; };/'
+        sed -re's/.*/'$prefix'&() { tests:& "${@}"; };/'
     )
 }
 
