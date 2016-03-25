@@ -11,7 +11,8 @@ set -euo pipefail
 tests:import-namespace() {
     local prefix="${1:-}"
 
-    tests:debug "! importing namespace 'tests:'"
+    tests:debug "! importing namespace 'tests:'" \
+        $(sed -re"s/.+/ into '&'/" <<< $prefix)
 
     builtin eval $(
         declare -F |
