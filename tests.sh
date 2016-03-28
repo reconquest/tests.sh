@@ -663,15 +663,45 @@ tests:clone() {
 # directory and then source it.
 #
 # @arg $1 filename Filename to copy and source.
-# @arg $2 filename Destionation under test dir (not required).
+# @arg $2 filename Destination under test dir (not required).
+# $exitcode >0 If source failed
 tests:involve() {
-    local source_name=$(basename $1)
-    tests:debug "{BEGIN} source $source_name"
-    tests:clone "$1" "${2:-.}"
+    local source="$1"
+    local basename="$(basename "$1")"
+    local destination="${2:-.}"
 
+    if [ -d $destination ]; then
+        destination=$destination/$source
+    fi
+
+    tests:clone "$1" "$destination"
+
+    tests:require $destination
+}
+
+# @description Source file with debug.
+#
+# @arg $1 filename Filename to source.
+# $exitcode >0 If source failed
+tests:require() {
+    local source_name="$1"
+
+    tests:debug "{BEGIN} source $source_name"
     tests:debug "\$ source $source_name"
-    builtin source "$source_name" >$_tests_out 2>&1
-    _tests_indent < $_tests_out
+
+    # not using 'builtin source' there, because it will fail
+    # if source failed and 'if !' will not help
+    if command source "$source_name" >$_tests_out 2>&1; then
+        _tests_indent < $_tests_out
+    else
+        local exitcode=$?
+
+        tests:debug "{ERROR} in $source_name"
+        _tests_indent < $_tests_out
+
+        return $exitcode
+    fi
+
     tests:debug "{END} source $source_name"
 }
 # }}}
@@ -886,7 +916,9 @@ _tests_run_raw() {
 
         if [ $run_global_setup ]; then
             tests:debug "{GLOBAL} SETUP: ${@}"
-            tests:involve global.setup.sh
+            if ! tests:involve global.setup.sh; then
+                exit 1
+            fi
         fi
 
         local run_setup=""
@@ -898,7 +930,9 @@ _tests_run_raw() {
 
         if [ $run_setup ]; then
             tests:debug "{BEGIN} SETUP"
-            tests:involve local.setup.sh
+            if ! tests:involve local.setup.sh; then
+                exit 1
+            fi
             tests:debug "{END} SETUP"
         fi
 
