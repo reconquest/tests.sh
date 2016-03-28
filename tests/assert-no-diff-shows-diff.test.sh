@@ -10,7 +10,7 @@ tests:put multiline-file-b <<EOF2
 3
 EOF2
 
-tests:assert-no-diff multiline-file-b multiline-file-a
+tests:assert-no-diff multiline-file-a multiline-file-b
 EOF
 
 eval tests.sh -d testcases -A
@@ -25,4 +25,4 @@ put expected.diff <<EOF
 EOF
 
 sed -rne '/no diff/,+8 { /@@/,$ p }' $(tests:get-stdout-file) | put actual.diff
-assert-no-diff expected.diff actual.diff "-w"
+assert-no-diff actual.diff expected.diff "-w"

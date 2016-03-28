@@ -159,12 +159,12 @@ tests:assert-re() {
 #   tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
 #   tests:assert-no-diff stdout "$(echo -e '1\n3')" # test will fail
 #
-# @arg $1 'stdout'|'stderr'|string|filename Actual value.
-# @arg $2 string|filename Expected value.
+# @arg $1 string|filename Expected value.
+# @arg $2 'stdout'|'stderr'|string|filename Actual value.
 # @arg $@ any Additional arguments for diff.
 tests:assert-no-diff() {
-    local actual_target="$1"
-    local expected_target="$2"
+    local expected_target="$1"
+    local actual_target="$2"
     shift 2
 
     local options="-u $@"
