@@ -116,7 +116,13 @@ tests:match-re() {
         file=$_tests_stderr
     fi
 
-    if grep -qP "$regexp" $file; then
+    if [ -z "$regexp" ]; then
+        if [ -s $file ]; then
+            echo 1
+        else
+            echo 0
+        fi
+    elif grep -qP "$regexp" $file; then
         echo 0
     else
         echo $?
