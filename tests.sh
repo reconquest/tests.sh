@@ -640,7 +640,7 @@ tests:clone() {
 
     while [ $# -gt 0 ]; do
         if [ "$last_arg" ]; then
-            args+=($_tests_case_dir/$last_arg)
+            args+=($_tests_base_dir/$last_arg)
         fi
 
         last_arg=""
@@ -654,11 +654,14 @@ tests:clone() {
         shift
     done
 
-    tests:debug "\$ cp ${args[@]:1} $_tests_dir/$last_arg"
+    local files="${args[@]:1}"
+    local dest="$_tests_dir/$last_arg"
+
+    tests:debug "\$ cp $files $dest"
 
     local stderr
-    if ! stderr=$(/bin/cp ${args[@]:1} $_tests_dir/$last_arg 2>&1); then
-        tests:debug "error copying: cp ${args[@]:1} $_tests_dir/$last_arg:"
+    if ! stderr=$(/bin/cp "$files" "$dest" 2>&1); then
+        tests:debug "error copying: cp $files $dest:"
         _tests_indent <<< "$stderr"
         _tests_interrupt
     fi
@@ -677,10 +680,10 @@ tests:involve() {
     local destination="${2:-.}"
 
     if [ -d $destination ]; then
-        destination=$destination/$source
+        destination=$destination/$(basename $source)
     fi
 
-    tests:clone "$1" "$destination"
+    tests:clone "$source" "$destination"
 
     tests:require $destination
 }
@@ -690,18 +693,18 @@ tests:involve() {
 # @arg $1 filename Filename to source.
 # $exitcode >0 If source failed
 tests:require() {
-    local source_name="$1"
+    local file="$1"
 
-    tests:debug "{BEGIN} source $source_name"
-    tests:debug "\$ source $source_name"
+    tests:debug "{BEGIN} source $file"
+    tests:debug "\$ source $file"
 
-    trap "tests:debug '{ERROR} in $source_name'" EXIT
+    trap "tests:debug '{ERROR} in $file'" EXIT
 
-    builtin source "$source_name"
+    builtin source "$file"
 
     trap - EXIT
 
-    tests:debug "{END} source $source_name"
+    tests:debug "{END} source $file"
 }
 # }}}
 
@@ -732,11 +735,8 @@ _tests_out=""
 # File with last exitcode.
 _tests_exitcode=""
 
-# Current working directory for testcase.
-_tests_case_dir=""
-
-# 1 if global setup script evaled.
-_tests_setup_done=""
+# Current working directory for test suite.
+_tests_base_dir=""
 
 # Operation used in assertions (= or !=)
 _tests_assert_operation="="
@@ -784,26 +784,40 @@ _tests_quote_cmd() {
     echo "${cmd[@]}"
 }
 
+_tests_get_testcases() {
+    local directory="$1"
+    local mask="$2"
+    (
+        shopt -s globstar nullglob
+        echo $directory/$mask
+    )
+}
+
 _tests_run_all() {
-    local see_subdirectories=$1
+    local testcases_dir="$1"
+    local testcase_setup="$2"
+    local see_subdirs=$3
 
     local filemask="*.test.sh"
-    if $see_subdirectories; then
-        filemask="**/*.test.sh *.test.sh"
+    if $see_subdirs; then
+        filemask="**/*.test.sh"
     fi
 
-    if ! stat $(eval echo "$filemask")  >/dev/null 2>&1; then
+    local testcases=($(_tests_get_testcases "$testcases_dir" "$filemask"))
+    if [ ! -v testcases ]; then
         echo no testcases found.
 
         exit 1
     fi
+
 
     local verbose=$_tests_verbose
     if [ $verbose -lt 1 ]; then
         _tests_verbose=4
     fi
 
-    echo running test suite at: $(pwd)
+    local testsuite_dir=$(readlink -f "$_tests_base_dir/$testcases_dir")
+    echo running test suite at: $testsuite_dir
     echo
     if [ $verbose -eq 0 ]; then
         echo -ne '  '
@@ -811,7 +825,7 @@ _tests_run_all() {
 
     local success=0
     local assertions_count=0
-    for file in $(eval echo "$filemask"); do
+    for file in "${testcases[@]}"; do
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
             local pwd="$(pwd)"
@@ -819,7 +833,7 @@ _tests_run_all() {
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$file" &> $stdout; then
+            if _tests_run_one "$file" "$testcase_setup" &> $stdout; then
                 result=0
             else
                 result=$?
@@ -841,7 +855,7 @@ _tests_run_all() {
             fi
         else
             local result
-            if _tests_run_one "$file"; then
+            if _tests_run_one "$file" "$testcase_setup"; then
                 result=0
             else
                 result=$?
@@ -866,15 +880,17 @@ _tests_run_all() {
 }
 
 _tests_run_one() {
-    local target="$1"
-    local file="$(readlink -f $target)"
+    local testcase="$1"
+    local testcase_setup="$2"
 
-    if ! test -e $file; then
-        echo "testcase '$file' not found"
+    local testcase_file="$_tests_base_dir/$testcase"
+
+    if ! test -e $testcase; then
+        echo "testcase '$testcase' not found"
         return 1
     fi
 
-    tests:debug "TESTCASE $file"
+    tests:debug "TESTCASE $testcase"
 
     _tests_init
 
@@ -882,16 +898,8 @@ _tests_run_one() {
         echo 0 > $_tests_dir/.asserts
     fi
 
-    local run_global_setup=""
-    if [ -e global.setup.sh -a ! "$_tests_setup_done" ]; then
-        run_global_setup=1
-        _tests_setup_done=1
-    fi
-
-    _tests_case_dir=$(dirname "$file")
-
     local result
-    if _tests_run_raw; then
+    if _tests_run_raw "$testcase_file" "$testcase_setup"; then
         result=0
     else
         result=$?
@@ -908,42 +916,32 @@ _tests_run_one() {
     _tests_cleanup
 
     if [ $result -ne 0 ]; then
-        tests:debug "TESTCASE FAILED $(readlink -f $file)"
+        tests:debug "TESTCASE FAILED $testcase"
         return 1
     else
-        tests:debug "TESTCASE PASSED $(readlink -f $file)"
+        tests:debug "TESTCASE PASSED $testcase"
         return 0
     fi
 }
 
 _tests_run_raw() {
+    local testcase_file="$1"
+    local testcase_setup="$2"
     (
         PATH="$_tests_dir/bin:$PATH"
 
-        if [ $run_global_setup ]; then
-            tests:debug "{GLOBAL} SETUP: ${@}"
-            if ! tests:involve global.setup.sh; then
-                exit 1
-            fi
-        fi
-
-        local run_setup=""
-        if [ -e local.setup.sh ]; then
-            run_setup=1
-        fi
-
         builtin cd $_tests_dir
 
-        if [ $run_setup ]; then
+        if [ -n "$testcase_setup" ]; then
             tests:debug "{BEGIN} SETUP"
 
-            if ! tests:involve local.setup.sh; then
+            if ! tests:involve "$testcase_setup"; then
                 exit 1
             fi
             tests:debug "{END} SETUP"
         fi
 
-        builtin source "$file"
+        builtin source "$testcase_file"
     ) 2>&1 | _tests_indent
 }
 
@@ -953,7 +951,7 @@ _tests_get_last() {
 
 _tests_set_last() {
     local testcase=$1
-    echo "$testcase" > $_tests_case_dir/.last-testcase
+    echo "$testcase" > $_tests_base_dir/.last-testcase
 }
 
 _tests_rm_last() {
@@ -1263,16 +1261,17 @@ they are treated as testcases.
 
 Usage:
     tests.sh -h
-    tests.sh [-v] [-d <dir>] -A [-s]
-    tests.sh [-v] [-d <dir>] -O [<name>]
+    tests.sh [-v] [-d <dir>] [-s <path>] -A [-a]
+    tests.sh [-v] [-d <dir>] [-s <path>] -O [<name>]
     tests.sh -i
 
 Options:
     -h | --help  Show this help.
     -A           Run all testcases in current directory.
-    -s           Run all testcases in subdirectories of current directory.
+    -a           Run all testcases in subdirectories of current directory.
     -O <name>    Run specified testcase only. If no testcase specified, last
                  failed testcase will be ran.
+    -s <path>    Run specified setup file before running every testcase.
     -d <dir>     Change directory to specified before running testcases.
                  [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
@@ -1282,14 +1281,16 @@ EOF
 
 
 __main__() {
-    local script_path="$(readlink -f $0)"
+    _tests_base_dir=$(pwd)
 
-    local see_subdirectories=false
+    local testcases_dir="."
+    local testcases_setup=""
+    local see_subdirs=false
 
-    while getopts ":hid:vs" arg "${@}"; do
+    while getopts ":his:d:va" arg "${@}"; do
         case $arg in
             d)
-                builtin cd "$OPTARG"
+                testcases_dir="$OPTARG"
                 ;;
             v)
                 _tests_verbose=$(($_tests_verbose+1))
@@ -1300,8 +1301,11 @@ __main__() {
             h)
                 _tests_show_usage
                 ;;
+            a)
+                see_subdirs=true
+                ;;
             s)
-                see_subdirectories=true
+                testcases_setup="$OPTARG"
                 ;;
             ?)
                 args+=("$OPTARG")
@@ -1310,10 +1314,11 @@ __main__() {
 
     local OPTIND
 
-    while getopts ":hid:vAO" arg "${@}"; do
+    while getopts ":his:d:vaAO" arg "${@}"; do
         case $arg in
             A)
-                _tests_run_all $see_subdirectories
+                _tests_run_all \
+                    "$testcases_dir" "$testcases_setup" $see_subdirs
 
                 exit $?
                 ;;
@@ -1328,7 +1333,7 @@ __main__() {
                 fi
 
                 for name in "${files[@]}"; do
-                    if ! _tests_run_one "$name"; then
+                    if ! _tests_run_one "$name" "$testcases_setup"; then
                         exit 1
                     fi
                 done

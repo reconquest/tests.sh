@@ -6,7 +6,7 @@ put testcases/local.setup.sh <<EOF
 WTF
 EOF
 
-not ensure tests.sh -vvd testcases -A
+not ensure tests.sh -vvd testcases -A -s testcases/local.setup.sh
 
 assert-stdout '{ERROR} in ./local.setup.sh'
 assert-stdout 'WTF: command not found'

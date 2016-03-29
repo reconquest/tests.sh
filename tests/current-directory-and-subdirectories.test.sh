@@ -18,6 +18,6 @@ put testcases/dom/dom.test.sh <<EOF
 tests:assert-equals "dom" "dom"
 EOF
 
-ensure tests.sh -d testcases -A -s
+ensure tests.sh -d testcases -A -a
 
 assert-stdout '4 tests (4 assertions) done successfully!'
