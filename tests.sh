@@ -792,7 +792,14 @@ _tests_quote_cmd() {
 }
 
 _tests_run_all() {
-    if ! stat *.test.sh >/dev/null 2>&1; then
+    local see_subdirectories=$1
+
+    local filemask="*.test.sh"
+    if $see_subdirectories; then
+        filemask="**/*.test.sh *.test.sh"
+    fi
+
+    if ! stat $(eval echo "$filemask")  >/dev/null 2>&1; then
         echo no testcases found.
 
         exit 1
@@ -811,7 +818,7 @@ _tests_run_all() {
 
     local success=0
     local assertions_count=0
-    for file in *.test.sh; do
+    for file in $(eval echo "$filemask"); do
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
             local pwd="$(pwd)"
@@ -1262,15 +1269,16 @@ they are treated as testcases.
 
 Usage:
     tests.sh -h
-    tests.sh [-v] [-d <dir>] -A
+    tests.sh [-v] [-d <dir>] -A [-s]
     tests.sh [-v] [-d <dir>] -O [<name>]
     tests.sh -i
 
 Options:
     -h | --help  Show this help.
     -A           Run all testcases in current directory.
-    -O <name>    Run specified testcase only. If no testcase specified, last failed
-                 testcase will be ran.
+    -s           Run all testcases in subdirectories of current directory.
+    -O <name>    Run specified testcase only. If no testcase specified, last
+                 failed testcase will be ran.
     -d <dir>     Change directory to specified before running testcases.
                  [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
@@ -1282,7 +1290,9 @@ EOF
 __main__() {
     local script_path="$(readlink -f $0)"
 
-    while getopts ":hid:v" arg "${@}"; do
+    local see_subdirectories=false
+
+    while getopts ":hid:vs" arg "${@}"; do
         case $arg in
             d)
                 builtin cd "$OPTARG"
@@ -1296,6 +1306,9 @@ __main__() {
             h)
                 _tests_show_usage
                 ;;
+            s)
+                see_subdirectories=true
+                ;;
             ?)
                 args+=("$OPTARG")
         esac
@@ -1306,7 +1319,7 @@ __main__() {
     while getopts ":hid:vAO" arg "${@}"; do
         case $arg in
             A)
-                _tests_run_all
+                _tests_run_all $see_subdirectories
 
                 exit $?
                 ;;
