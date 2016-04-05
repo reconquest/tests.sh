@@ -695,18 +695,11 @@ tests:require() {
     tests:debug "{BEGIN} source $source_name"
     tests:debug "\$ source $source_name"
 
-    # not using 'builtin source' there, because it will fail
-    # if source failed and 'if !' will not help
-    if command source "$source_name" >$_tests_out 2>&1; then
-        _tests_indent < $_tests_out
-    else
-        local exitcode=$?
+    trap "tests:debug '{ERROR} in $source_name'" EXIT
 
-        tests:debug "{ERROR} in $source_name"
-        _tests_indent < $_tests_out
+    builtin source "$source_name"
 
-        return $exitcode
-    fi
+    trap - EXIT
 
     tests:debug "{END} source $source_name"
 }
@@ -943,6 +936,7 @@ _tests_run_raw() {
 
         if [ $run_setup ]; then
             tests:debug "{BEGIN} SETUP"
+
             if ! tests:involve local.setup.sh; then
                 exit 1
             fi
