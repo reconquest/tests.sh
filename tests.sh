@@ -531,14 +531,16 @@ tests:run-background() {
     touch "$dir/stderr"
     touch "$dir/pid"
 
-    builtin eval "( $cmd >$dir/stdout 2>$dir/stderr )" \
+    builtin eval "( bash -c '$cmd' >$dir/stdout 2>$dir/stderr )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
-    local bg_pid
-    if ! bg_pid=$(pgrep -f "$cmd"); then
+    local bg_bash_pid
+    if ! bg_bash_pid=$(pgrep -f "$cmd"); then
         tests:debug "background process does not started, interrupting test"
         _tests_interrupt
     fi
+
+    local bg_pid=$(pstree -p $bg_bash_pid | grep -o "[[:digit:]]*" | tail -n1)
 
     echo "$bg_pid" > "$dir/pid"
     tests:debug "background process started, pid = $bg_pid"
@@ -580,7 +582,7 @@ tests:stop-background() {
     local id="$1"
     local pid=$(cat $_tests_dir/.bg/$id/pid)
 
-    kill -9 $pid
+    kill -9 "$pid" 2>/dev/null
 
     tests:debug "background task #$id stopped"
     rm -rf $_tests_dir/.bg/$id/
