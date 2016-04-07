@@ -531,16 +531,10 @@ tests:run-background() {
     touch "$dir/stderr"
     touch "$dir/pid"
 
-    builtin eval "( bash -c '$cmd' >$dir/stdout 2>$dir/stderr )" \
+    builtin eval "( { $cmd; } >$dir/stdout 2>$dir/stderr )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
-    local bg_bash_pid
-    if ! bg_bash_pid=$(pgrep -f "$cmd"); then
-        tests:debug "background process does not started, interrupting test"
-        _tests_interrupt
-    fi
-
-    local bg_pid=$(pstree -p $bg_bash_pid | grep -o "[[:digit:]]*" | tail -n1)
+    local bg_pid=$!
 
     echo "$bg_pid" > "$dir/pid"
     tests:debug "background process started, pid = $bg_pid"
@@ -582,7 +576,7 @@ tests:stop-background() {
     local id="$1"
     local pid=$(cat $_tests_dir/.bg/$id/pid)
 
-    kill -9 "$pid" 2>/dev/null
+    kill -TERM "$pid" 2>/dev/null
 
     tests:debug "background task #$id stopped"
     rm -rf $_tests_dir/.bg/$id/
@@ -596,24 +590,24 @@ tests:stop-background() {
 # @arg $3 int Interval of time to check changes after.
 # @arg $4 int Timeout in seconds.
 tests:wait-file-changes() {
-    local function="$1"
+    local cmd="$1"
     local file="$2"
     local sleep_interval="$3"
-    local sleep_max="$(( $4/$sleep_interval ))"
+    local sleep_max="$4"
 
     local stat_initial=$(stat $file)
     local sleep_iter=0
+    local sleep_iter_max=$(bc <<< "$sleep_max/$sleep_interval")
 
-
-    tests:debug "% waiting file changes after executing cmd: $function"
-    tests:eval $function
+    tests:debug "% waiting file changes after executing cmd: $cmd"
+    tests:eval $cmd
 
     while true; do
         sleep_iter=$(($sleep_iter+1))
 
         local stat_actual=$(stat $file)
         if [[ "$stat_initial" == "$stat_actual" ]]; then
-            if [[ $sleep_iter -ne $sleep_max ]]; then
+            if [[ $sleep_iter -ne $sleep_iter_max ]]; then
                 tests:eval sleep $sleep_interval
                 continue
             fi
