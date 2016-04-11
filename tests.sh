@@ -169,10 +169,15 @@ tests:assert-re() {
 # @arg $2 'stdout'|'stderr'|string|filename Actual value.
 # @arg $@ any Additional arguments for diff.
 tests:assert-no-diff() {
-    local expected_target="$1"
-    local actual_target="$2"
-    shift 2
+    if [ -s /dev/stdin ]; then
+        local expected_target=/dev/stdin
+    else
+        local expected_target="$1"
+        shift
+    fi
 
+    local actual_target="$1"
+    shift
     local options="-u $@"
 
     if [ -e "$expected_target" ]; then
