@@ -779,9 +779,12 @@ _tests_eval() {
             *'<'*) cmd+=($i) ;;
             *'&')  cmd+=($i) ;;
             '|')   cmd+=($i) ;;
-            *)     cmd+=(\""$i"\")
+            *)     cmd+=(\'"$i"\')
         esac
     done
+
+    # drop positional arguments
+    set --
 
     builtin eval "${cmd[@]}"
 }
@@ -800,7 +803,7 @@ _tests_indent() {
 }
 
 _tests_quote_re() {
-    sed -r 's/[.*+[()?]|]/\\\0/g'
+    sed -r 's/[.*+[()?$^]|]/\\\0/g'
 }
 
 _tests_quote_cmd() {
