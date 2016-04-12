@@ -150,8 +150,8 @@ tests:assert-re() {
     _tests_make_assertion $result 0 \
         "regexp does not match" \
         ">>> ${regexp:-<empty regexp>}" \
-        "<<< contents of ${target}:" \
-        "\n$(_tests_indent < $file)"
+        "<<< contents of ${target}:\n\
+            $(_tests_indent "$target" < $file)"
 
     _tests_inc_asserts_count
 }
@@ -207,8 +207,8 @@ tests:assert-no-diff() {
     fi
 
     _tests_make_assertion $result 0 \
-        "no diff" \
-        "\n$(_tests_indent <<< "$diff")"
+        "no diff\n\
+            $(_tests_indent 'diff' <<< "$diff")"
 
     _tests_inc_asserts_count
 }
@@ -310,12 +310,12 @@ tests:put() {
     local stderr
     if ! stderr=$(cat 2>&1 > $file); then
         tests:debug "error writing file:"
-        _tests_indent <<< "$stderr"
+        _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
     fi
 
-    tests:debug "wrote a file $file with content:"
-    _tests_indent < $file
+    tests:debug "wrote the file $file with content:"
+    _tests_indent 'file' < $file
 
 }
 
@@ -456,15 +456,37 @@ tests:cd() {
 #
 # @arg $@ string String to evaluate.
 tests:eval() {
-    tests:debug "$ $@"
+    local input=/dev/stdin
 
-    if _tests_eval_and_capture_output "${@}"; then
-        echo 0 > $_tests_exitcode
+    if [ -s "$input" ]; then
+        tests:debug "$ (stdin) > $@"
     else
-        echo $? > $_tests_exitcode
+        input=/dev/null
+
+        tests:debug "$ $@"
     fi
 
-    _tests_indent < $_tests_out
+    {
+        if _tests_eval_and_capture_output "${@}"; then
+            echo 0 > $_tests_exitcode
+        else
+            echo $? > $_tests_exitcode
+        fi < <(tee /dev/stderr < $input)
+    } 2>&1 | _tests_indent 'stdin'
+
+    if [ -s $_tests_stdout ]; then
+        tests:debug "evaluation stdout:"
+        _tests_indent 'stdout' < $_tests_stdout
+    else
+        tests:debug "evaluation stdout is empty"
+    fi
+
+    if [ -s $_tests_stderr ]; then
+        tests:debug "evaluation stderr:"
+        _tests_indent 'stderr' < $_tests_stderr
+    else
+        tests:debug "evaluation stderr is empty"
+    fi
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -492,7 +514,7 @@ tests:make-tmp-dir() {
         /bin/mkdir \
             $(sed -re "s#(^|\\s)([^-])#\\1$_tests_dir/\\2#g" <<< "${@}")); then
         tests:debug "error making directories ${@}:"
-        _tests_indent <<< "$stderr"
+        _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
     fi
 }
@@ -663,7 +685,7 @@ tests:clone() {
     local stderr
     if ! stderr=$(/bin/cp "$files" "$dest" 2>&1); then
         tests:debug "error copying: cp $files $dest:"
-        _tests_indent <<< "$stderr"
+        _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
     fi
 
@@ -765,7 +787,16 @@ _tests_eval() {
 }
 
 _tests_indent() {
-    sed -r -e 's/^/    /' -e '1i\ ' -e '$a\ '
+    local prefix="${1:-}"
+    if [ $_tests_verbose -lt 3 ]; then
+        prefix=""
+    fi
+
+    if [ "$prefix" ]; then
+        sed -e "s/^/($prefix) /"
+    else
+        cat
+    fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ '
 }
 
 _tests_quote_re() {
@@ -920,7 +951,7 @@ _tests_run_one() {
         tests:debug "TESTCASE FAILED $testcase"
         return 1
     else
-        tests:debug "TESTCASE PASSED $testcase"
+        tests:debug "TESTCASE PASSED $testcase"$'\n'
         return 0
     fi
 }
@@ -1005,14 +1036,14 @@ _tests_cleanup() {
                 tests:debug "background task #$bg_id stdout is empty"
             else
                 tests:debug "background task #$bg_id stdout:"
-                _tests_indent <<< "$bg_stdout"
+                _tests_indent 'stdout' <<< "$bg_stdout"
             fi
 
             if [[ "$bg_stderr" == "" ]]; then
                 tests:debug "background task #$bg_id stderr is empty"
             else
                 tests:debug "background task #$bg_id stderr:"
-                _tests_indent <<< "$bg_stderr"
+                _tests_indent 'stderr' <<< "$bg_stderr"
             fi
         fi
 
@@ -1301,6 +1332,7 @@ __main__() {
                 ;;
             h)
                 _tests_show_usage
+                exit 1
                 ;;
             a)
                 see_subdirs=true
@@ -1343,13 +1375,13 @@ __main__() {
                 ;;
             h)
                 _tests_show_usage
-
-                exit $?
+                exit 1
                 ;;
         esac
     done
 
     _tests_show_usage
+    exit 1
 }
 
 
