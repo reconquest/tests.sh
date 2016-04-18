@@ -14,7 +14,7 @@ tests:eval cat multiline-file-a
 tests:assert-no-diff multiline-file-a stdout
 tests:not tests:assert-no-diff multiline-file-b stdout
 
-tests:eval 'cat multiline-file-a >&2'
+tests:eval cat multiline-file-a '>&' 2
 tests:assert-no-diff multiline-file-a stderr
 tests:not tests:assert-no-diff multiline-file-b stderr
 EOF

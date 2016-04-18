@@ -5,7 +5,7 @@ tests:assert-equals "\$(cat \$(tests:get-stderr-file))" ""
 EOF
 
 put testcases/can-access-stderr.test.sh <<EOF
-tests:eval echo 1 '>&2'
+tests:eval echo 1 '>&' 2
 tests:assert-equals "\$(cat \$(tests:get-stdout-file))" ""
 tests:assert-equals "\$(cat \$(tests:get-stderr-file))" "1"
 EOF

@@ -51,7 +51,7 @@ tests:assert-equals() {
     local actual="$2"
 
     _tests_make_assertion "$expected" "$actual" \
-        "two strings not equals" \
+        "two strings equals" \
         ">>> $expected$" \
         "<<< $actual$"
 
@@ -148,10 +148,10 @@ tests:assert-re() {
     local result=$(cat $_tests_exitcode)
 
     _tests_make_assertion $result 0 \
-        "regexp does not match" \
+        "regexp matches" \
         ">>> ${regexp:-<empty regexp>}" \
         "<<< contents of ${target}:\n\
-            $(_tests_indent "$target" < $file)"
+            $(_tests_indent "$target" < $file | _tests_check_empty)"
 
     _tests_inc_asserts_count
 }
@@ -207,8 +207,8 @@ tests:assert-no-diff() {
     fi
 
     _tests_make_assertion $result 0 \
-        "no diff\n\
-            $(_tests_indent 'diff' <<< "$diff")"
+        "no diff" \
+        "\n$(_tests_indent 'diff' <<< "$diff")"
 
     _tests_inc_asserts_count
 }
@@ -382,7 +382,7 @@ tests:assert-exitcode() {
     shift
 
     _tests_make_assertion "$expected" "$actual" \
-        "exit code expectation failed" \
+        "command exited with code" \
         "actual exit code = $actual" \
         "expected exit code $_tests_last_assert_operation $expected"
 
@@ -448,11 +448,34 @@ tests:cd() {
 
 # @description Evaluates specified string via shell 'eval'.
 #
+# Redirection syntax differs from what can be found in bash.
+#
+# Redirection operators will be used as redirection only if they are
+# passed as separate argumentm, like this: `tests:eval echo 1 '>' 2`.
+#
+# List of redirection operators:
+# * `>`
+# * `<`
+# * `>&`
+# * `<&`
+# * `>&n`, where `n` is a number
+# * `<&n`, where `n` is a number
+# * `>>`
+# * `<<<`
+# * `<>`
+# * `|`
+#
+# To redirect output to file use: `> filename` (note space).
+#
+# Also, if only one argument is passed to `tests:eval`, the it will
+# be evaled as is. So, `tests:eval "echo 1 > 2"` will create file `2`,
+# but `tests:eval echo "1 > 2"` will only output `1 > 2` to the stdout.
+#
 # @example
 #   tests:eval echo 123 "# i'm comment"
 #   tests:eval echo 123 \# i\'m comment
 #   tests:eval echo 567 '1>&2' # redirect to stderr
-#   tests:eval echo 567 1>\&2' # same
+#   tests:eval echo 567 1\>\&2' # same
 #
 # @arg $@ string String to evaluate.
 tests:eval() {
@@ -467,26 +490,26 @@ tests:eval() {
     fi
 
     {
-        if _tests_eval_and_capture_output "${@}"; then
-            echo 0 > $_tests_exitcode
-        else
-            echo $? > $_tests_exitcode
-        fi < <(tee /dev/stderr < $input)
-    } 2>&1 | _tests_indent 'stdin'
+        {
+            {
+                if _tests_eval_and_capture_output "${@}"; then
+                    echo 0 > $_tests_exitcode
+                else
+                    echo $? > $_tests_exitcode
+                fi < <(tee /dev/stderr < $input)
 
-    if [ -s $_tests_stdout ]; then
-        tests:debug "evaluation stdout:"
-        _tests_indent 'stdout' < $_tests_stdout
-    else
-        tests:debug "evaluation stdout is empty"
-    fi
+            # print eval in separate descriptor to evade next _tests_indent
+            } 300>&1 | _tests_indent 'eval' | head -n-1 >&300
 
-    if [ -s $_tests_stderr ]; then
-        tests:debug "evaluation stderr:"
-        _tests_indent 'stderr' < $_tests_stderr
-    else
-        tests:debug "evaluation stderr is empty"
-    fi
+        } 2>&1 | _tests_indent 'stdin'
+
+    } 300>&1
+
+    tests:debug "evaluation stdout:"
+    _tests_indent 'stdout' < $_tests_stdout | _tests_check_empty
+
+    tests:debug "evaluation stderr:"
+    _tests_indent 'stderr' < $_tests_stderr | _tests_check_empty
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -771,20 +794,35 @@ _tests_last_assert_operation="="
 
 _tests_eval() {
     local cmd=()
-    for i in "$@"; do
-        case $i in
-            '`'*)  cmd+=($i) ;;
-            *'`')  cmd+=($i) ;;
-            *'>'*) cmd+=($i) ;;
-            *'<'*) cmd+=($i) ;;
-            *'&')  cmd+=($i) ;;
-            '|')   cmd+=($i) ;;
-            *)     cmd+=(\'"$i"\')
-        esac
-    done
+
+    if [ $# -gt 1 ]; then
+        for i in "$@"; do
+            case "$i" in
+                '<>')  cmd+=($i) ;;
+                '>>')  cmd+=($i) ;;
+                '<<<') cmd+=($i) ;;
+                '<&')  cmd+=($i) ;;
+                '>&')  cmd+=($i) ;;
+                '>')   cmd+=($i) ;;
+                '<')   cmd+=($i) ;;
+                '|')   cmd+=($i) ;;
+
+                '>&'[[:digit:]]) cmd+=($i) ;;
+                '<&'[[:digit:]]) cmd+=($i) ;;
+
+                *) cmd+=("$(_tests_quote_cmd <<< "$i")")
+            esac
+        done
+    else
+        cmd=($1)
+    fi
 
     # drop positional arguments
     set --
+
+    if [ $_tests_verbose -gt 3 ]; then
+        echo "builtin eval "${cmd[@]} >&300
+    fi
 
     builtin eval "${cmd[@]}"
 }
@@ -802,21 +840,32 @@ _tests_indent() {
     fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ '
 }
 
+_tests_check_empty() {
+    local first_byte
+    local empty=false
+
+    if ! first_byte=$(dd bs=1 count=1 2>/dev/null | od -to1 -An); then
+        empty=true
+    fi
+
+    if [ -z "$first_byte" ]; then
+        empty=true
+    fi
+
+    if $empty; then
+        _tests_indent <<< "<empty>"
+    else
+        printf "\\${first_byte# }"
+        cat
+    fi
+}
+
 _tests_quote_re() {
     sed -r 's/[.*+[()?$^]|]/\\\0/g'
 }
 
 _tests_quote_cmd() {
-    local cmd=()
-    for i in "$@"; do
-        if grep -q "[' \"\$]" <<< "$i"; then
-            cmd+=($(sed -r -e "s/['\"\$]/\\&/" -e "s/.*/'&'/" <<< "$i"))
-        else
-            cmd+=($i)
-        fi
-    done
-
-    echo "${cmd[@]}"
+    sed -r -e "s/['\`\"]|\\$\{?[0-9#\!?@_\[\]]*\}?/\\\&/g" -e 's/$|^/"/g'
 }
 
 _tests_get_testcases() {
@@ -1063,6 +1112,8 @@ _tests_interrupt() {
 }
 
 _tests_make_assertion() {
+    local assertion_name=$3
+
     local result
     if test "$1" $_tests_assert_operation "$2"; then
         result=0
@@ -1070,18 +1121,27 @@ _tests_make_assertion() {
         result=$?
     fi
 
-    shift 2
+    shift 3
 
     if [ $result -gt 0 ]; then
         touch "$_tests_dir/.failed"
-        tests:debug "expectation failed: $1"
-        shift
+        tests:debug "assertion ($assertion_name): failed"
+    fi
+
+    if [ $_tests_verbose -gt 3 -o $result -gt 0 ]; then
+        if [ $result -eq 0 ]; then
+            tests:debug "assertion ($assertion_name): success"
+        fi
+
         while [ $# -gt 0 ]; do
-            tests:debug "$1"
+            tests:debug "assertion ($assertion_name): $1"
 
             shift
         done
+    fi
 
+
+    if [ $result -gt 0 ]; then
         _tests_interrupt
     fi
 }
@@ -1124,7 +1184,7 @@ _tests_eval_and_capture_output() {
                     | tee $_tests_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
                 ;;
         esac
-    ) > $_tests_out 2>&1
+    ) >$_tests_out 2>&1
 }
 
 _tests_print_docs() {

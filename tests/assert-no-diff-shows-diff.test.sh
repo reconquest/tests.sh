@@ -22,7 +22,7 @@ put expected.diff <<EOF
  3
 EOF
 
-sed -ne '/no diff/,+7 { /@@/,$ { s/(diff) //; p } }' \
+sed -ne '/no diff/,+8 { /@@/,$ { s/(diff) //; p } }' \
         $(tests:get-stdout-file) \
     | put actual.diff
 

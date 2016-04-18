@@ -11,6 +11,8 @@ ensure tests.sh -vvvv -d testcases -A
 put expected.output <<EOF
 # $ (stdin) > cat -n
 
+    (eval) builtin eval "cat" "-n"
+
     (stdin) hello
     (stdin) from
     (stdin) cat
@@ -21,10 +23,12 @@ put expected.output <<EOF
     (stdout)      2  from
     (stdout)      3  cat
 
-# evaluation stderr is empty
+# evaluation stderr:
+
+    <empty>
 EOF
 
-sed -nre '/cat -n/,+12 { s/(stdout) //; s/# [^:]+:/#/; p }' \
+sed -nre '/cat -n/,+16 { s/(stdout) //; s/# [^:]+:/#/; p }' \
     $(tests:get-stdout-file) \
         | put actual.output
 

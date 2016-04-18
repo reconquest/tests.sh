@@ -1,10 +1,10 @@
 put testcases/echo-meep-on-stderr-success.test.sh <<EOF
-tests:eval 'echo meep >&2'
+tests:eval echo meep '>&' 2
 tests:assert-stderr meep
 EOF
 
 put testcases/echo-meep-on-stderr-fail.test.sh <<EOF
-tests:eval 'echo whoa >&2'
+tests:eval echo whoa '>&' 2
 tests:not tests:assert-stderr meep
 EOF
 

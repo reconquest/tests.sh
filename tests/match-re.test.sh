@@ -8,7 +8,7 @@ tests:assert-fail
 EOF
 
 put testcases/match-re-stderr.test.sh <<EOF
-tests:eval echo 'meep >&2'
+tests:eval 'echo meep >& 2'
 tests:match-re stderr m..p
 tests:assert-success
 

@@ -6,7 +6,7 @@ tests:not tests:assert-re stdout w..a
 EOF
 
 put testcases/assert-re-stderr.test.sh <<EOF
-tests:eval echo 'meep >&2'
+tests:eval echo meep '>&' 2
 
 tests:assert-re stderr m..p
 tests:not tests:assert-re stderr w..a
