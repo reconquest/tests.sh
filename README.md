@@ -7,6 +7,7 @@ tests.sh expected to find files named `*.test.sh` in the directory, provided by
 `-d` flag, and they are treated as testcases.
 
 # Synopsis
+
 ```
 tests.sh --- simple test library for testing commands.
 
@@ -14,17 +15,20 @@ tests.sh expected to find files named *.test.sh in current directory, and
 they are treated as testcases.
 
 Usage:
-    tests.sh -h | ---help
-    tests.sh [-v] [-d <dir>] -A
-    tests.sh [-v] [-d <dir>] -O [<name>]
+    tests.sh -h
+    tests.sh [-v] [-d <dir>] [-s <path>] -A [-a]
+    tests.sh [-v] [-d <dir>] [-s <path>] -O [<name>]
     tests.sh -i
 
 Options:
     -h | --help  Show this help.
     -A           Run all testcases in current directory.
-    -O <name>    Run specified testcase only. If no testcase specified, last failed
-                 testcase will be ran.
+    -a           Run all testcases in subdirectories of current directory.
+    -O <name>    Run specified testcase only. If no testcase specified, last
+                 failed testcase will be ran.
+    -s <path>    Run specified setup file before running every testcase.
     -d <dir>     Change directory to specified before running testcases.
+                 [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
     -i           Pretty-prints documentation for public API in markdown format.
 ```
@@ -44,29 +48,24 @@ Options:
    tests:assert-stdout-re '^1 '
    ```
 4. Run whole test suite using: `./tests.sh -d tests/ -A`;
-5. Run one testcase using: `./tests.sh -d tests/ -O <test-case-name>.test.sh`;
+5. Run one testcase using: `./tests.sh -d tests/ -O <test-case-name>`;
 6. Run last failed testcase using: `./test.sh -d tests -O`;
 
 ## Set ups
 
-Two type of set up scripts are available: global and local.
-
-Global set up script should be named `global.setup.sh` and be located in the
-same directory as testcases. It will be sourced once before all testcases began
-to execute. Useful example of using global testcase is compiling program.
-
-Local set up script should be named `local.setup.sh` and be located in the
-same directory as testcases. It will be sources every time before each
-testcase.
+Local set up script should be specified via `-s` flag. `local.setup.sh`. It
+will be sources every time before each testcase.
 
 # Reference
 
 ## tests:import-namespace()
 
 Make all functions from tests.sh available without 'tests:'
-prefix.
+prefix. Prefix can be also user defined, like 't:'.
 
-_Function has no arguments._
+### Arguments
+
+* **$1** (string): Custom prefix for namespace functions.
 
 ## tests:get-tmp-dir()
 
@@ -150,14 +149,10 @@ echo $? # 1
 * **$1** ('stdout'|'stderr'|filename): If 'stdout' or 'stderr' is used, use
 * **$2** (regexp): Regexp to match, same as in grep.
 
-### Exit codes
-
-* **1**: If comparison failed.
-* **0**: If contents equals.
-
 ## tests:assert-re()
 
-Same, as 'tests:match-re', but abort testing if comparison failed.
+Same as 'tests:match-re', but abort testing if comparison
+failed.
 
 #### Example
 
@@ -187,11 +182,11 @@ tests:assert-no-diff stdout "$(echo -e '1\n3')" # test will fail
 
 ### Arguments
 
-* **$1** ('stdout'|'stderr'|string|filename): Actual value.
-* **$2** (string|filename): Expected value.
+* **$1** (string|filename): Expected value.
+* **$2** ('stdout'|'stderr'|string|filename): Actual value.
 * **...** (any): Additional arguments for diff.
 
-## tests:get-stdout()
+## tests:get-stdout-file()
 
 Returns file containing stdout of last command.
 
@@ -199,14 +194,14 @@ Returns file containing stdout of last command.
 
 ```bash
 tests:eval echo 123
-cat $(tests:get-stdout) # will echo 123
+cat $(tests:get-stdout-file) # will echo 123
 ```
 
 ### Output on stdout
 
 * Filename containing stdout.
 
-## tests:get-stderr()
+## tests:get-stderr-file()
 
 Returns file containing stderr of last command.
 
@@ -230,8 +225,8 @@ all blank.
 
 ```bash
 tests:eval echo -e '1\n2'
-tests:assert-no-diff stdout "$(echo -e '1\n2')" # note quotes
-tests:assert-no-diff stdout "$(echo -e '1\n\n2')" # test will pass
+tests:assert-no-diff-blank stdout "$(echo -e '1\n2')" # note quotes
+tests:assert-no-diff-blank stdout "$(echo -e '1\n\n2')" # test will pass
 ```
 
 #### See also
@@ -240,7 +235,7 @@ tests:assert-no-diff stdout "$(echo -e '1\n\n2')" # test will pass
 
 ## tests:assert-test()
 
-Same, as shell 'test' function, but asserts, that exit code is
+Same as shell 'test' function, but asserts, that exit code is
 zero.
 
 #### Example
@@ -378,12 +373,12 @@ tests:not tests:assert-success
 
 ## tests:describe()
 
-Evaluates given command and show it's output in the debug, used
-for debug purposes.
+Same as tests:debug(), but colorize output
+for better vizibility.
 
 ### Arguments
 
-* **...** (any): Command to evaluate.
+* **...** (any): String to output.
 
 ## tests:debug()
 
@@ -410,6 +405,24 @@ Changes working directory to specified directory.
 ## tests:eval()
 
 Evaluates specified string via shell 'eval'.
+Redirection syntax differs from what can be found in bash.
+Redirection operators will be used as redirection only if they are
+passed as separate argumentm, like this: `tests:eval echo 1 '>' 2`.
+List of redirection operators:
+* `>`
+* `<`
+* `>&`
+* `<&`
+* `>&n`, where `n` is a number
+* `<&n`, where `n` is a number
+* `>>`
+* `<<<`
+* `<>`
+* `|`
+To redirect output to file use: `> filename` (note space).
+Also, if only one argument is passed to `tests:eval`, the it will
+be evaled as is. So, `tests:eval "echo 1 > 2"` will create file `2`,
+but `tests:eval echo "1 > 2"` will only output `1 > 2` to the stdout.
 
 #### Example
 
@@ -417,7 +430,7 @@ Evaluates specified string via shell 'eval'.
 tests:eval echo 123 "# i'm comment"
 tests:eval echo 123 \# i\'m comment
 tests:eval echo 567 '1>&2' # redirect to stderr
-tests:eval echo 567 1>\&2' # same
+tests:eval echo 567 1\>\&2' # same
 ```
 
 ### Arguments
@@ -439,13 +452,13 @@ tests:esnure false # will fail
 
 * **...** (any): Command to evaluate.
 
-## tests:mkdir()
+## tests:make-tmp-dir()
 
 Creates temporary directory.
 
 ### Arguments
 
-* **$1** (string): Directory name.
+* **...** (any): Same as for mkdir command.
 
 ## tests:cd-tmp-dir()
 
@@ -536,16 +549,16 @@ Sets verbosity of testcase output.
 
 * **$1** (int): Verbosity.
 
-## tests:cp()
+## tests:clone()
 
 Copy specified file or directory from the testcases
 dir to the temporary test directory.
 
 ### Arguments
 
-* **$1** (filename): Filename to copy.
+* **...** (any): Same args, as for cp commmand.
 
-## tests:source()
+## tests:involve()
 
 Copy specified file from testcases to the temporary test
 directory and then source it.
@@ -553,3 +566,12 @@ directory and then source it.
 ### Arguments
 
 * **$1** (filename): Filename to copy and source.
+* **$2** (filename): Destination under test dir (not required).
+
+## tests:require()
+
+Source file with debug.
+
+### Arguments
+
+* **$1** (filename): Filename to source.
