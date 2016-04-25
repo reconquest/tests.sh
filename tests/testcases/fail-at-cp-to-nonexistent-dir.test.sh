@@ -3,4 +3,4 @@ tests:cp -r . a/b/c/d/blah
 EOF
 
 not ensure tests.sh -d testcases -A
-assert-stdout 'cp: command not found'
+assert-stderr 'cp: command not found'

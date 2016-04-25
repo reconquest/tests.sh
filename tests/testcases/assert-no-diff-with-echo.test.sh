@@ -15,7 +15,7 @@ put expected.diff <<EOF
 EOF
 
 sed -ne '/no diff/,+8 { /@@/,$ { s/(diff) //; p } }' \
-    $(tests:get-stdout-file) \
+    $(tests:get-stderr-file) \
         | put actual.diff
 
 assert-no-diff actual.diff expected.diff "-w"

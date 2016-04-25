@@ -5,4 +5,4 @@ EOF
 eval tests.sh -d testcases -A
 
 assert-fail
-assert-stdout "assert-equals: command not found"
+assert-stderr "assert-equals: command not found"

@@ -426,6 +426,8 @@ tests:describe() {
 #
 # @arg $@ any String to echo.
 tests:debug() {
+    local output=$(_tests_get_debug_fd)
+
     if [ $_tests_verbose -lt 1 ]; then
         return
     fi
@@ -434,7 +436,7 @@ tests:debug() {
         echo -e "# $_tests_dir: $@"
     else
         echo -e "### $@"
-    fi >&2
+    fi >&${output}
 }
 
 # @description Changes working directory to specified directory.
@@ -779,6 +781,8 @@ _tests_assert_operation="="
 # Last used assert operation.
 _tests_last_assert_operation="="
 
+_tests_debug_fd="304"
+
 # }}}
 
 _tests_escape_cmd() {
@@ -813,20 +817,44 @@ _tests_eval() {
     builtin eval "$(_tests_escape_cmd "${@}")"
 }
 
+_tests_init_debug_fd() {
+    while :; do
+        if { >&${_tests_debug_fd}; } 2>/dev/null; then
+            _tests_debug_fd=$(( $_tests_debug_fd + 1 ))
+        else
+            return 0
+        fi
+    done
+}
+
+_tests_get_debug_fd() {
+    if { >&${_tests_debug_fd}; } 2>/dev/null; then
+        echo ${_tests_debug_fd}
+    else
+        echo 2
+    fi
+}
+
 _tests_indent() {
+    local output=$(_tests_get_debug_fd)
+
     local prefix="${1:-}"
     if [ $_tests_verbose -lt 3 ]; then
         prefix=""
     fi
 
-    if [ "$prefix" ]; then
-        sed -e "s/^/($prefix) /"
-    else
-        cat
-    fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ ' >&2
+    {
+        if [ "$prefix" ]; then
+            sed -e "s/^/($prefix) /"
+        else
+            cat
+        fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ '
+    } >&${output}
 }
 
 _tests_check_empty() {
+    local output=$(_tests_get_debug_fd)
+
     local first_byte
     local empty=false
 
@@ -839,11 +867,11 @@ _tests_check_empty() {
     fi
 
     if $empty; then
-        _tests_indent <<< "<empty>"
+        _tests_indent <<< "<empty>" >&1
     else
         printf "\\${first_byte# }"
         cat
-    fi >&2
+    fi >&${output}
 }
 
 _tests_quote_re() {
@@ -863,6 +891,7 @@ _tests_get_testcases() {
     )
 }
 
+# FIXME refactor that shit!
 _tests_run_all() {
     local testcases_dir="$1"
     local testcase_setup="$2"
@@ -898,12 +927,15 @@ _tests_run_all() {
     for file in "${testcases[@]}"; do
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
+            local stderr="`mktemp -t stdout.XXXX`"
             local pwd="$(pwd)"
 
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$file" "$testcase_setup" &> $stdout; then
+            if _tests_run_one "$file" "$testcase_setup" \
+                    >$stdout 2>$stderr;
+            then
                 result=0
             else
                 result=$?
@@ -918,9 +950,15 @@ _tests_run_all() {
                 echo -n F
                 echo
                 echo
+
                 cat $stdout
+                cat $stderr >&2
+
                 rm -f $stdout
+                rm -f $stderr
+
                 _tests_set_last "$file"
+
                 exit $result
             fi
         else
@@ -1043,6 +1081,9 @@ _tests_init() {
     touch $_tests_exitcode
     touch $_tests_out
 
+    _tests_init_debug_fd
+    tests:debug "{DEBUG} USING DEBUG FD: >&$_tests_debug_fd"
+
     tests:debug "{BEGIN} TEST SESSION"
 }
 
@@ -1156,13 +1197,15 @@ _tests_eval_and_output_to_fd() {
     _tests_escape_cmd "${@}" | _tests_indent 'eval'
 
     {
-        if _tests_eval_and_capture_output "${@}"; then
-            echo 0 > $_tests_exitcode
-        else
-            echo $? > $_tests_exitcode
-        fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
+        {
+            if _tests_eval_and_capture_output "${@}"; then
+                echo 0 > $_tests_exitcode
+            else
+                echo $? > $_tests_exitcode
+            fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
 
-    } 303>&1 | _tests_indent 'stdin' 2>&1 | tail -n+2 >&2
+        } 303>&1 | _tests_indent 'stdin' 2>&1 | tail -n+2 >&2
+    } 304>&2
 
     tests:debug "evaluation stdout:"
     _tests_indent 'stdout' < $_tests_stdout 2>&1 | _tests_check_empty
