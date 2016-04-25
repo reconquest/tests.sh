@@ -542,25 +542,3 @@ Source file with debug.
 
 * **$1** (filename): Filename to source.
 
-tests.sh --- simple test library for testing commands.
-
-tests.sh expected to find files named *.test.sh in current directory, and
-they are treated as testcases.
-
-Usage:
-    tests.sh -h
-    tests.sh [-v] [-d <dir>] [-s <path>] -A [-a]
-    tests.sh [-v] [-d <dir>] [-s <path>] -O [<name>]
-    tests.sh -i
-
-Options:
-    -h | --help  Show this help.
-    -A           Run all testcases in current directory.
-    -a           Run all testcases in subdirectories of current directory.
-    -O <name>    Run specified testcase only. If no testcase specified, last
-                 failed testcase will be ran.
-    -s <path>    Run specified setup file before running every testcase.
-    -d <dir>     Change directory to specified before running testcases.
-                 [default: current working directory].
-    -v           Verbosity. Flag can be specified several times.
-    -i           Pretty-prints documentation for public API in markdown format.

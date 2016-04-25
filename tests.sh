@@ -1412,6 +1412,7 @@ __main__() {
                 ;;
             i)
                 _tests_print_docs
+                exit $?
                 ;;
             h)
                 _tests_show_usage
