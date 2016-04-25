@@ -151,7 +151,8 @@ tests:assert-re() {
         "regexp matches" \
         ">>> ${regexp:-<empty regexp>}" \
         "<<< contents of ${target}:\n\
-            $(_tests_indent "$target" < $file 2>&1 | _tests_check_empty 2>&1)"
+            $(_tests_pipe _tests_indent "$target" < $file \
+                | _tests_pipe _tests_check_empty)"
 
     _tests_inc_asserts_count
 }
@@ -208,7 +209,7 @@ tests:assert-no-diff() {
 
     _tests_make_assertion $result 0 \
         "no diff" \
-        "\n$(_tests_indent 'diff' <<< "$diff" 2>&1)"
+        "\n$(_tests_pipe _tests_indent 'diff' <<< "$diff")"
 
     _tests_inc_asserts_count
 }
@@ -557,7 +558,6 @@ tests:run-background() {
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
     local dir="$_tests_dir/.bg/$identifier/"
 
-
     tests:debug "starting background task #$identifier"
     tests:debug "# '$cmd'"
 
@@ -572,8 +572,8 @@ tests:run-background() {
     touch "$dir/stderr"
     touch "$dir/pid"
 
-    builtin eval "( { $cmd; } >$dir/stdout 2>$dir/stderr )" \
-        {0..255}\<\&- {0..255}\>\&- \&
+    ( exec {_tests_debug_fd}>&2; { $cmd >$dir/stdout 2>$dir/stderr ; } ) \
+            </dev/null &
 
     local bg_pid=$!
 
@@ -813,18 +813,17 @@ _tests_escape_cmd() {
     echo "${cmd[@]}"
 }
 
-_tests_eval() {
-    builtin eval "$(_tests_escape_cmd "${@}")"
+_tests_pipe() {
+    local debug_fd=$_tests_debug_fd
+    exec {_tests_debug_fd}>&1
+
+    builtin eval "${@}"
+
+    _tests_debug_fd=$debug_fd
 }
 
-_tests_init_debug_fd() {
-    while :; do
-        if { >&${_tests_debug_fd}; } 2>/dev/null; then
-            _tests_debug_fd=$(( $_tests_debug_fd + 1 ))
-        else
-            return 0
-        fi
-    done
+_tests_eval() {
+    builtin eval "$(_tests_escape_cmd "${@}")"
 }
 
 _tests_get_debug_fd() {
@@ -867,7 +866,7 @@ _tests_check_empty() {
     fi
 
     if $empty; then
-        _tests_indent <<< "<empty>" >&1
+        _tests_pipe _tests_indent <<< "<empty>"
     else
         printf "\\${first_byte# }"
         cat
@@ -1081,9 +1080,6 @@ _tests_init() {
     touch $_tests_exitcode
     touch $_tests_out
 
-    _tests_init_debug_fd
-    tests:debug "{DEBUG} USING DEBUG FD: >&$_tests_debug_fd"
-
     tests:debug "{BEGIN} TEST SESSION"
 }
 
@@ -1196,22 +1192,26 @@ _tests_eval_and_output_to_fd() {
 
     _tests_escape_cmd "${@}" | _tests_indent 'eval'
 
+    exec {_tests_debug_fd}>&2
+
     {
         {
-            if _tests_eval_and_capture_output "${@}"; then
-                echo 0 > $_tests_exitcode
-            else
-                echo $? > $_tests_exitcode
-            fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
+            {
+                if _tests_eval_and_capture_output "${@}"; then
+                    echo 0 > $_tests_exitcode
+                else
+                    echo $? > $_tests_exitcode
+                fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
 
-        } 303>&1 | _tests_indent 'stdin' 2>&1 | tail -n+2 >&2
-    } 304>&2
+            } 303>&1 | _tests_pipe _tests_indent 'stdin' | tail -n+2 >&2
+        }
+    }
 
     tests:debug "evaluation stdout:"
-    _tests_indent 'stdout' < $_tests_stdout 2>&1 | _tests_check_empty
+    _tests_pipe _tests_indent 'stdout' < $_tests_stdout | _tests_check_empty
 
     tests:debug "evaluation stderr:"
-    _tests_indent 'stderr' < $_tests_stderr 2>&1 | _tests_check_empty
+    _tests_pipe _tests_indent 'stderr' < $_tests_stderr | _tests_check_empty
 }
 
 _tests_eval_and_capture_output() {
