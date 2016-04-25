@@ -4,4 +4,4 @@ EOF
 
 eval tests.sh -vd testcases -A
 
-assert-stdout-re '@@\s+\e\[7;49;34.*XXX'
+assert-stderr-re '@@\s+\e\[7;49;34.*XXX'

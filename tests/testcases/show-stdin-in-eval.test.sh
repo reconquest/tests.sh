@@ -11,7 +11,7 @@ ensure tests.sh -vvvv -d testcases -A
 put expected.output <<EOF
 # $ (stdin) > cat -n
 
-    (eval) builtin eval "cat" "-n"
+    (eval) "cat" "-n"
 
     (stdin) hello
     (stdin) from
@@ -29,7 +29,7 @@ put expected.output <<EOF
 EOF
 
 sed -nre '/cat -n/,+16 { s/(stdout) //; s/# [^:]+:/#/; p }' \
-    $(tests:get-stdout-file) \
+    $(tests:get-stderr-file) \
         | put actual.output
 
 assert-no-diff actual.output expected.output "-w"

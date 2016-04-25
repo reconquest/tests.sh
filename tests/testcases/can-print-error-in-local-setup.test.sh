@@ -8,5 +8,5 @@ EOF
 
 not ensure tests.sh -vvd testcases -A -s testcases/local.setup.sh
 
-assert-stdout '{ERROR} in ./local.setup.sh'
-assert-stdout 'WTF: command not found'
+assert-stderr '{ERROR} in ./local.setup.sh'
+assert-stderr 'WTF: command not found'

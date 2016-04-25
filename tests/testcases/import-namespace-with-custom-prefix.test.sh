@@ -7,5 +7,5 @@ EOF
 
 ensure tests.sh -d testcases -vA
 
-assert-stdout "importing namespace 'tests:' into 't:'"
+assert-stderr "importing namespace 'tests:' into 't:'"
 assert-stdout "1 tests (2 assertions) done successfully!"

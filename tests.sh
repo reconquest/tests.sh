@@ -151,7 +151,7 @@ tests:assert-re() {
         "regexp matches" \
         ">>> ${regexp:-<empty regexp>}" \
         "<<< contents of ${target}:\n\
-            $(_tests_indent "$target" < $file | _tests_check_empty)"
+            $(_tests_indent "$target" < $file 2>&1 | _tests_check_empty 2>&1)"
 
     _tests_inc_asserts_count
 }
@@ -208,7 +208,7 @@ tests:assert-no-diff() {
 
     _tests_make_assertion $result 0 \
         "no diff" \
-        "\n$(_tests_indent 'diff' <<< "$diff")"
+        "\n$(_tests_indent 'diff' <<< "$diff" 2>&1)"
 
     _tests_inc_asserts_count
 }
@@ -471,6 +471,9 @@ tests:cd() {
 # be evaled as is. So, `tests:eval "echo 1 > 2"` will create file `2`,
 # but `tests:eval echo "1 > 2"` will only output `1 > 2` to the stdout.
 #
+# *NOTE*: you will not get any stdout or stderr from evaluated command.
+# To obtain stdout or stderr see `tests:pipe`.
+#
 # @example
 #   tests:eval echo 123 "# i'm comment"
 #   tests:eval echo 123 \# i\'m comment
@@ -478,38 +481,24 @@ tests:cd() {
 #   tests:eval echo 567 1\>\&2' # same
 #
 # @arg $@ string String to evaluate.
+# @see tests:pipe
 tests:eval() {
-    local input=/dev/stdin
+    _tests_eval_and_output_to_fd 301 302 \
+        301>$_tests_out 302>$_tests_out "${@}"
+}
 
-    if [ -s "$input" ]; then
-        tests:debug "$ (stdin) > $@"
-    else
-        input=/dev/null
-
-        tests:debug "$ $@"
-    fi
-
-    {
-        {
-            {
-                if _tests_eval_and_capture_output "${@}"; then
-                    echo 0 > $_tests_exitcode
-                else
-                    echo $? > $_tests_exitcode
-                fi < <(tee /dev/stderr < $input)
-
-            # print eval in separate descriptor to evade next _tests_indent
-            } 300>&1 | _tests_indent 'eval' | head -n-1 >&300
-
-        } 2>&1 | _tests_indent 'stdin'
-
-    } 300>&1
-
-    tests:debug "evaluation stdout:"
-    _tests_indent 'stdout' < $_tests_stdout | _tests_check_empty
-
-    tests:debug "evaluation stderr:"
-    _tests_indent 'stderr' < $_tests_stderr | _tests_check_empty
+# @description Same, as `tests:eval`, but return stdout and stderr
+# as expected.
+#
+# @example
+#   lines=$(tests:eval echo 123 | wc -l)  # note not escaped pipe
+#   tests:assert-equals $lines 1
+#
+# @arg $@ string String to evaluate.
+# @see tests:eval
+tests:pipe() {
+    _tests_eval_and_output_to_fd 301 302 \
+        301>&1 302>&2 "${@}"
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -792,7 +781,7 @@ _tests_last_assert_operation="="
 
 # }}}
 
-_tests_eval() {
+_tests_escape_cmd() {
     local cmd=()
 
     if [ $# -gt 1 ]; then
@@ -817,14 +806,11 @@ _tests_eval() {
         cmd=($1)
     fi
 
-    # drop positional arguments
-    set --
+    echo "${cmd[@]}"
+}
 
-    if [ $_tests_verbose -gt 3 ]; then
-        echo "builtin eval "${cmd[@]} >&300
-    fi
-
-    builtin eval "${cmd[@]}"
+_tests_eval() {
+    builtin eval "$(_tests_escape_cmd "${@}")"
 }
 
 _tests_indent() {
@@ -837,7 +823,7 @@ _tests_indent() {
         sed -e "s/^/($prefix) /"
     else
         cat
-    fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ '
+    fi | sed -e 's/^/    /' -e '1i\ ' -e '$a\ ' >&2
 }
 
 _tests_check_empty() {
@@ -857,7 +843,7 @@ _tests_check_empty() {
     else
         printf "\\${first_byte# }"
         cat
-    fi
+    fi >&2
 }
 
 _tests_quote_re() {
@@ -1151,6 +1137,40 @@ _tests_inc_asserts_count() {
     echo $(($count+1)) > $_tests_dir/.asserts
 }
 
+_tests_eval_and_output_to_fd() {
+    local stdout=$1
+    local stderr=$2
+
+    shift 2
+
+    local input=/dev/stdin
+
+    if [ -s "$input" ]; then
+        tests:debug "$ (stdin) > $@"
+    else
+        input=/dev/null
+
+        tests:debug "$ $@"
+    fi
+
+    _tests_escape_cmd "${@}" | _tests_indent 'eval'
+
+    {
+        if _tests_eval_and_capture_output "${@}"; then
+            echo 0 > $_tests_exitcode
+        else
+            echo $? > $_tests_exitcode
+        fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
+
+    } 303>&1 | _tests_indent 'stdin' 2>&1 | tail -n+2 >&2
+
+    tests:debug "evaluation stdout:"
+    _tests_indent 'stdout' < $_tests_stdout 2>&1 | _tests_check_empty
+
+    tests:debug "evaluation stderr:"
+    _tests_indent 'stderr' < $_tests_stderr 2>&1 | _tests_check_empty
+}
+
 _tests_eval_and_capture_output() {
     (
         set +euo pipefail
@@ -1184,7 +1204,7 @@ _tests_eval_and_capture_output() {
                     | tee $_tests_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
                 ;;
         esac
-    ) >$_tests_out 2>&1
+    )
 }
 
 _tests_print_docs() {
