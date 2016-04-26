@@ -1196,15 +1196,13 @@ _tests_eval_and_output_to_fd() {
 
     {
         {
-            {
-                if _tests_eval_and_capture_output "${@}"; then
-                    echo 0 > $_tests_exitcode
-                else
-                    echo $? > $_tests_exitcode
-                fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
+            if _tests_eval_and_capture_output "${@}"; then
+                echo 0 > $_tests_exitcode
+            else
+                echo $? > $_tests_exitcode
+            fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
 
-            } 303>&1 | _tests_pipe _tests_indent 'stdin' | tail -n+2 >&2
-        }
+        } 303>&1 | _tests_pipe _tests_indent 'stdin' | tail -n+2 >&2
     }
 
     tests:debug "evaluation stdout:"
