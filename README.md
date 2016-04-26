@@ -1,7 +1,9 @@
 tests.sh
 ========
 
-tests.sh --- simple test library for testing commands.
+![tests-sh](https://cloud.githubusercontent.com/assets/674812/14815361/c029d328-0bcc-11e6-91b6-4f27c872d060.gif)
+
+tests.sh — simple test library for testing commands.
 
 tests.sh expected to find files named `*.test.sh` in the directory, provided by
 `-d` flag, and they are treated as testcases.
