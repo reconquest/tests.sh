@@ -407,13 +407,20 @@ tests:assert-exitcode() {
 #
 # @arg $1 int Expected exit code.
 tests:not() {
-    local old_exitcode=$?
-
     _tests_assert_operation="!="
     _tests_last_assert_operation="!="
 
     "${@}"
+
     _tests_assert_operation="="
+}
+
+tests:unbuffer() {
+    _tests_eval_buffering="stdbuf -e0 -i0 -o0"
+
+    "${@}"
+
+    _tests_eval_buffering=""
 }
 
 # @description Same as tests:debug(), but colorize output
@@ -581,7 +588,7 @@ tests:run-background() {
     touch "$dir/stderr"
     touch "$dir/pid"
 
-    eval "( _tests_run_bg_task $identifier $dir ${cmd[@]}; )" \
+    builtin eval "( _tests_run_bg_task $identifier $dir ${cmd[@]} )" \
         {0..255}\<\&- {0..255}\>\&- \&
 
     local bg_pid=$!
@@ -590,7 +597,7 @@ tests:run-background() {
 
     tests:debug "{START} [BG] #$identifier: started pid:<$bg_pid>"
 
-    eval $id_var=\$identifier
+    builtin eval $id_var=\$identifier
 }
 
 _tests_run_bg_task() {
@@ -646,11 +653,20 @@ tests:stop-background() {
 
     tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
 
-    kill -TERM "$pid"
+    if ! _tests_pipe kill -TERM "$pid" | _tests_indent 'kill'; then
+        tests:debug "{STOP} [BG] #$id pid:<$pid>: already stopped"
+    else
+        local exit_code
+        if _tests_pipe wait $pid | _tests_indent 'wait'; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
 
-    if wait $pid 2>/dev/null || true; then
-        tests:debug "{STOP} [BG] #$id pid:<$pid>: stopped (kill -TERM)"
+        tests:debug "{STOP} [BG] #$id pid:<$pid>: stopped: exit $exit_code"
     fi
+
+    return 0
 }
 
 # @description Waits, until specified file will be changed or timeout passed
@@ -884,7 +900,7 @@ _tests_indent() {
     fi
 
     {
-        sed \
+        sed -u \
             -e "s/^/    ${prefix:+"($prefix) "}/" \
             -e '1i\ ' \
             -e '$a\ ' | \
@@ -970,6 +986,8 @@ _tests_run_all() {
             local stderr="`mktemp -t stdout.XXXX`"
             local pwd="$(pwd)"
 
+            trap "_tests_show_test_output $stdout $stderr $file" EXIT
+
             _tests_asserts=0
 
             local result
@@ -990,14 +1008,6 @@ _tests_run_all() {
                 echo -n F
                 echo
                 echo
-
-                cat $stdout
-                cat $stderr >&2
-
-                rm -f $stdout
-                rm -f $stderr
-
-                _tests_set_last "$file"
 
                 exit $result
             fi
@@ -1025,6 +1035,24 @@ _tests_run_all() {
     echo
     echo ---
     echo "$success tests ($assertions_count assertions) done successfully!"
+}
+
+_tests_show_test_output() {
+    local stdout=$1
+    local stderr=$2
+    local last=$3
+
+    if [ ! -e $stdout -o ! -e $stderr ]; then
+        return
+    fi
+
+    cat $stdout
+    cat $stderr >&2
+
+    rm -f $stdout
+    rm -f $stderr
+
+    _tests_set_last "$file"
 }
 
 _tests_run_one() {
@@ -1075,12 +1103,12 @@ _tests_run_one() {
 _tests_run_raw() {
     local testcase_file="$1"
     local testcase_setup="$2"
-    (
+    local exit_code
+
+    if ! (
         PATH="$_tests_dir/bin:$PATH"
 
         builtin cd $_tests_dir
-
-        trap _tests_wait_bg_tasks RETURN
 
         if [ -n "$testcase_setup" ]; then
             if [ $_tests_verbose -gt 2 ]; then
@@ -1098,6 +1126,15 @@ _tests_run_raw() {
 
         builtin source "$testcase_file"
     ) 2>&1 | _tests_indent
+    then
+        exit_code=$?
+    else
+        exit_code=0
+    fi
+
+    _tests_wait_bg_tasks
+
+    return $exit_code
 }
 
 _tests_get_last() {
@@ -1118,11 +1155,13 @@ _tests_run_bg_reader() {
     local pipe=$2
 
     (
-        while read line; do
-            if [ $_tests_verbose -gt 3 ]; then
-                tests:debug "${prefix:+"($prefix) "}$line"
-            fi
-        done < $pipe
+        while [ -e $_tests_bg_channels/.active ]; do
+            while read line; do
+                if [ $_tests_verbose -gt 3 ]; then
+                    tests:debug "${prefix:+"($prefix) "}$line"
+                fi
+            done < $pipe
+        done
     ) &
 }
 
@@ -1148,6 +1187,8 @@ _tests_init() {
     mkfifo $_tests_bg_channels/stderr
     mkfifo $_tests_bg_channels/debug
 
+    touch $_tests_bg_channels/.active
+
     _tests_run_bg_reader "bg stderr" $_tests_bg_channels/stderr
     _tests_run_bg_reader "bg stdout" $_tests_bg_channels/stdout
     _tests_run_bg_reader "" $_tests_bg_channels/debug
@@ -1158,6 +1199,8 @@ _tests_init() {
 
 _tests_cleanup() {
     local fifo
+
+    rm $_tests_bg_channels/.active
 
     exec {fifo}>$_tests_bg_channels/stdout
     exec {fifo}<&-
@@ -1592,7 +1635,9 @@ __main__() {
                 if [ -z "$filemask" ]; then
                     local files=$(_tests_get_last)
                 else
-                    local files=($(eval echo \*$filemask\*.test.sh))
+                    local files=(
+                        $(eval echo \$testcases_dir/\*$filemask\*.test.sh)
+                    )
                 fi
 
                 for name in "${files[@]}"; do

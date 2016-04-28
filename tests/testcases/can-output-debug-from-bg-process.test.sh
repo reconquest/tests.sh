@@ -1,5 +1,5 @@
 put testcases/output-debug-from-bg.test.sh <<EOF
-id=\$(tests:run-background tests:pipe 'tests:debug "hello"')
+tests:run-background id -- tests:pipe 'tests:debug "hello"'
 
 tests:assert-success false
 EOF
