@@ -555,10 +555,15 @@ tests:cd-tmp-dir() {
 # state, and if test failed, stderr and stdout of all background processes will
 # be printed.
 #
+# @arg $1 variable Name of variable to store BG process ID.
+# @arg $2 --
 # @arg $@ string Command to start.
 #
 # @stdout Unique identifier of running backout process.
 tests:run-background() {
+    local id_var=$1
+    shift 2 # for --
+
     local cmd="$@"
 
     local identifier=$(date +'%s.%N' | md5sum | head -c 6)
@@ -585,7 +590,7 @@ tests:run-background() {
 
     tests:debug "{START} [BG] #$identifier: started pid:<$bg_pid>"
 
-    echo "$identifier"
+    eval $id_var=\$identifier
 }
 
 _tests_run_bg_task() {
@@ -639,11 +644,13 @@ tests:stop-background() {
     local id="$1"
     local pid=$(cat $_tests_dir/.bg/$id/pid)
 
-    kill -TERM "$pid" 2>/dev/null
+    tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
 
-    wait -n
+    kill -TERM "$pid"
 
-    tests:debug "{STOP} [BG] #$id pid:<$pid>: stopped (kill -TERM)"
+    if wait $pid 2>/dev/null || true; then
+        tests:debug "{STOP} [BG] #$id pid:<$pid>: stopped (kill -TERM)"
+    fi
 }
 
 # @description Waits, until specified file will be changed or timeout passed
@@ -878,7 +885,7 @@ _tests_indent() {
 
     {
         sed \
-            -e "s/^/${prefix:+"($prefix) "}    /" \
+            -e "s/^/    ${prefix:+"($prefix) "}/" \
             -e '1i\ ' \
             -e '$a\ ' | \
                 sed -e "s/^/$_tests_debug_prefix/"
@@ -1073,6 +1080,8 @@ _tests_run_raw() {
 
         builtin cd $_tests_dir
 
+        trap _tests_wait_bg_tasks RETURN
+
         if [ -n "$testcase_setup" ]; then
             if [ $_tests_verbose -gt 2 ]; then
                 tests:debug "{BEGIN} SETUP"
@@ -1148,13 +1157,6 @@ _tests_init() {
 }
 
 _tests_cleanup() {
-    tests:debug "{END} TEST SESSION"
-
-    local failed=""
-    if test -e "$_tests_dir/.failed"; then
-        failed=1
-    fi
-
     local fifo
 
     exec {fifo}>$_tests_bg_channels/stdout
@@ -1166,6 +1168,14 @@ _tests_cleanup() {
     exec {fifo}>$_tests_bg_channels/debug
     exec {fifo}<&-
 
+    rm -rf "$_tests_dir"
+
+    _tests_dir=""
+
+    tests:debug "{END} TEST SESSION"
+}
+
+_tests_wait_bg_tasks() {
     for bg_dir in $_tests_dir/.bg/*; do
         if ! test -d $bg_dir; then
             continue
@@ -1175,7 +1185,7 @@ _tests_cleanup() {
 
         tests:stop-background $bg_id
 
-        if [ $failed ]; then
+        if [ -e "$_tests_dir/.failed" -o $_tests_verbose -gt 3 ]; then
             local bg_cmd=$(cat $bg_dir/cmd)
             local bg_stdout=$bg_dir/stdout
             local bg_stderr=$bg_dir/stderr
@@ -1192,10 +1202,6 @@ _tests_cleanup() {
                 | _tests_check_empty
         fi
     done
-
-    rm -rf "$_tests_dir"
-
-    _tests_dir=""
 }
 
 _tests_interrupt() {
