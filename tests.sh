@@ -480,6 +480,13 @@ tests:cd() {
 # *NOTE*: you will not get any stdout or stderr from evaluated command.
 # To obtain stdout or stderr see `tests:pipe`.
 #
+# *NOTE*: output will be buffered! If you want unbuffered output, use
+# `tests:runtime`.
+#
+# *NOTE*: use of that function will not produce any output to stdout
+# nor stderr. If you want to pipe your result to something, use
+# `tests:pipe`.
+#
 # @example
 #   tests:eval echo 123 "# i'm comment"
 #   tests:eval echo 123 \# i\'m comment
@@ -488,12 +495,20 @@ tests:cd() {
 #
 # @arg $@ string String to evaluate.
 # @see tests:pipe
+# @see tests:runtime
 tests:eval() {
     exec {output}>$_tests_run_output
 
     _tests_eval_and_output_to_fd ${output} ${output} "${@}"
 }
 
+# @description Same, as `tests:pipe`, but produce unbuffered result.
+#
+# @example
+#   tests:runtime 'echo 1; sleep 10; echo 2'  # see 1 immediately
+#
+# @arg $@ string String to evaluate.
+# @see tests:eval
 tests:runtime() {
     _tests_buffering="stdbuf -e0 -i0 -o0 "
 
@@ -570,7 +585,7 @@ tests:cd-tmp-dir() {
 # be printed.
 #
 # @arg $1 variable Name of variable to store BG process ID.
-# @arg $2 --
+# @arg $2 -- -- Delimiter, is REQUIRED.
 # @arg $@ string Command to start.
 #
 # @stdout Unique identifier of running backout process.
@@ -598,74 +613,6 @@ tests:run-background() {
     builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
 
     builtin eval $identifier_var=\$identifier
-}
-
-_tests_run_bg_task() {
-    local identifier=$1
-    local cmd_var=$2
-
-    shift 2
-
-    local to_evaluate=()
-
-    builtin eval to_evaluate=\"\${$cmd_var[@]}\"
-
-    _tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
-
-    exec {_tests_debug_fd}>$_tests_bg_channels/debug
-
-    tests:debug "{START} [BG] #$identifier: started pid:<$BASHPID>"
-
-    printf "%s\0" "${cmd[@]}" > $_tests_run_cmd
-    printf "%s" "$BASHPID" > $_tests_run_pidfile
-
-    tests:pipe "${cmd[@]}" \
-        1>$_tests_bg_channels/stdout \
-        2>$_tests_bg_channels/stderr
-}
-
-_tests_new_id() {
-    date +'%s.%N' | md5sum | head -c 6
-}
-
-_tests_prepare_eval_namespace() {
-    if [ $_tests_run_clean ]; then
-        if [ "$(cat $_tests_run_clean)" = "1" ]; then
-            return
-        fi
-    fi
-
-    local namespace="$1"
-
-    local identifier=$(_tests_new_id)
-    local dir=$_tests_dir/.ns/$namespace/$identifier
-
-    mkdir -p $dir
-
-    _tests_run_stdout=$dir/stdout
-    _tests_run_stderr=$dir/stderr
-    _tests_run_exitcode=$dir/exitcode
-    _tests_run_pidfile=$dir/pid
-    _tests_run_output=$dir/output
-    _tests_run_cmd=$dir/cmd
-    _tests_run_id=$dir/id
-    _tests_run_clean=$dir/clean
-
-    _tests_run_namespace=$dir
-
-    touch $_tests_run_stderr
-    touch $_tests_run_stdout
-    touch $_tests_run_pidfile
-    touch $_tests_run_exitcode
-    touch $_tests_run_output
-    touch $_tests_run_cmd
-
-    printf "%s" $identifier > $_tests_run_id
-    printf 1 > $_tests_run_clean
-
-    if [ $_tests_verbose -gt 4 ]; then
-        tests:debug "{DEBUG} prepared eval namespace at $dir"
-    fi
 }
 
 # @description Returns pid of specified background process.
@@ -1233,12 +1180,78 @@ _tests_run_raw() {
             fi
         fi
 
-        #trap _tests_wait_bg_tasks ERR
-        #trap _tests_wait_bg_tasks EXIT
         builtin source "$testcase_file"
 
         _tests_wait_bg_tasks
     ) 2>&1 | _tests_indent
+}
+
+_tests_run_bg_task() {
+    local identifier=$1
+    local cmd_var=$2
+
+    shift 2
+
+    local to_evaluate=()
+
+    builtin eval to_evaluate=\"\${$cmd_var[@]}\"
+
+    _tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
+
+    exec {_tests_debug_fd}>$_tests_bg_channels/debug
+
+    tests:debug "{START} [BG] #$identifier: started pid:<$BASHPID>"
+
+    printf "%s\0" "${cmd[@]}" > $_tests_run_cmd
+    printf "%s" "$BASHPID" > $_tests_run_pidfile
+
+    tests:pipe "${cmd[@]}" \
+        1>$_tests_bg_channels/stdout \
+        2>$_tests_bg_channels/stderr
+}
+
+_tests_new_id() {
+    date +'%s.%N' | md5sum | head -c 6
+}
+
+_tests_prepare_eval_namespace() {
+    if [ $_tests_run_clean ]; then
+        if [ "$(cat $_tests_run_clean)" = "1" ]; then
+            return
+        fi
+    fi
+
+    local namespace="$1"
+
+    local identifier=$(_tests_new_id)
+    local dir=$_tests_dir/.ns/$namespace/$identifier
+
+    mkdir -p $dir
+
+    _tests_run_stdout=$dir/stdout
+    _tests_run_stderr=$dir/stderr
+    _tests_run_exitcode=$dir/exitcode
+    _tests_run_pidfile=$dir/pid
+    _tests_run_output=$dir/output
+    _tests_run_cmd=$dir/cmd
+    _tests_run_id=$dir/id
+    _tests_run_clean=$dir/clean
+
+    _tests_run_namespace=$dir
+
+    touch $_tests_run_stderr
+    touch $_tests_run_stdout
+    touch $_tests_run_pidfile
+    touch $_tests_run_exitcode
+    touch $_tests_run_output
+    touch $_tests_run_cmd
+
+    printf "%s" $identifier > $_tests_run_id
+    printf 1 > $_tests_run_clean
+
+    if [ $_tests_verbose -gt 4 ]; then
+        tests:debug "{DEBUG} prepared eval namespace at $dir"
+    fi
 }
 
 _tests_get_last() {

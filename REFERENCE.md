@@ -365,6 +365,11 @@ be evaled as is. So, `tests:eval "echo 1 > 2"` will create file `2`,
 but `tests:eval echo "1 > 2"` will only output `1 > 2` to the stdout.
 *NOTE*: you will not get any stdout or stderr from evaluated command.
 To obtain stdout or stderr see `tests:pipe`.
+*NOTE*: output will be buffered! If you want unbuffered output, use
+`tests:runtime`.
+*NOTE*: use of that function will not produce any output to stdout
+nor stderr. If you want to pipe your result to something, use
+`tests:pipe`.
 
 #### Example
 
@@ -382,6 +387,28 @@ tests:eval echo 567 1\>\&2' # same
 #### See also
 
 * [tests:pipe](#tests:pipe)
+
+#### See also
+
+* [tests:runtime](#tests:runtime)
+
+## tests:runtime()
+
+Same, as `tests:pipe`, but produce unbuffered result.
+
+#### Example
+
+```bash
+tests:runtime 'echo 1; sleep 10; echo 2'  # see 1 immediately
+```
+
+### Arguments
+
+* **...** (string): String to evaluate.
+
+#### See also
+
+* [tests:eval](#tests:eval)
 
 ## tests:pipe()
 
@@ -445,6 +472,8 @@ be printed.
 
 ### Arguments
 
+* **$1** (variable): Name of variable to store BG process ID.
+* **$2** (--): -- Delimiter, is REQUIRED.
 * **...** (string): Command to start.
 
 ### Output on stdout
