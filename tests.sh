@@ -113,9 +113,9 @@ tests:match-re() {
     if [ -f $target ]; then
         file=$target
     elif [ "$target" = "stdout" ]; then
-        file=$_tests_stdout
+        file=$_tests_run_stdout
     else
-        file=$_tests_stderr
+        file=$_tests_run_stderr
     fi
 
     if [ -z "$regexp" ]; then
@@ -128,7 +128,7 @@ tests:match-re() {
         echo 0
     else
         echo $?
-    fi > $_tests_exitcode
+    fi > $_tests_run_exitcode
 }
 
 # @description Same as 'tests:match-re', but abort testing if comparison
@@ -147,7 +147,7 @@ tests:assert-re() {
 
     tests:match-re "$target" "$regexp"
 
-    local result=$(cat $_tests_exitcode)
+    local result=$(cat $_tests_run_exitcode)
 
     _tests_make_assertion $result 0 \
         "regexp matches" \
@@ -192,9 +192,9 @@ tests:assert-no-diff() {
     if [ -e "$actual_target" ]; then
         actual_content="$(cat $actual_target)"
     elif [ "$actual_target" = "stdout" ]; then
-        actual_content="$(cat $_tests_stdout)"
+        actual_content="$(cat $_tests_run_stdout)"
     elif [ "$actual_target" = "stderr" ]; then
-        actual_content="$(cat $_tests_stderr)"
+        actual_content="$(cat $_tests_run_stderr)"
     else
         actual_content="$actual_target"
     fi
@@ -224,7 +224,7 @@ tests:assert-no-diff() {
 #
 # @stdout Filename containing stdout.
 tests:get-stdout-file() {
-    echo $_tests_stdout
+    echo $_tests_run_stdout
 }
 
 # @description Returns file containing stderr of last command.
@@ -235,7 +235,7 @@ tests:get-stdout-file() {
 #
 # @stdout Filename containing stderr.
 tests:get-stderr-file() {
-    echo $_tests_stderr
+    echo $_tests_run_stderr
 }
 
 # @description Same as 'tests:assert-diff', but ignore changes whose lines are
@@ -382,7 +382,7 @@ tests:assert-fail() {
 #
 # @arg $1 int Expected exit code.
 tests:assert-exitcode() {
-    local actual=$(cat $_tests_exitcode)
+    local actual=$(cat $_tests_run_exitcode)
     local expected=$1
     shift
 
@@ -415,14 +415,6 @@ tests:not() {
     _tests_assert_operation="="
 }
 
-tests:unbuffer() {
-    _tests_eval_buffering="stdbuf -e0 -i0 -o0"
-
-    "${@}"
-
-    _tests_eval_buffering=""
-}
-
 # @description Same as tests:debug(), but colorize output
 # for better vizibility.
 #
@@ -445,7 +437,7 @@ tests:debug() {
     fi
 
     if [ "$_tests_dir" ]; then
-        echo -e "${_tests_debug_prefix:-# $_tests_dir: }$@"
+        echo -e "${_tests_debug_prefix:-# }$@"
     else
         echo -e "### $@"
     fi >&${output}
@@ -497,8 +489,21 @@ tests:cd() {
 # @arg $@ string String to evaluate.
 # @see tests:pipe
 tests:eval() {
-    _tests_eval_and_output_to_fd 301 302 \
-        301>$_tests_out 302>$_tests_out "${@}"
+    exec {output}>$_tests_run_output
+
+    _tests_eval_and_output_to_fd ${output} ${output} "${@}"
+}
+
+tests:runtime() {
+    _tests_buffering="stdbuf -e0 -i0 -o0 "
+
+    exec {output}>$_tests_run_output
+
+    { { _tests_eval_and_output_to_fd ${output} ${output} "${@}" \
+        {output}>&1 | _tests_indent 'stdout' ; } \
+        {output}>&1 | _tests_indent 'stderr' ; }
+
+    _tests_buffering=""
 }
 
 # @description Same, as `tests:eval`, but return stdout and stderr
@@ -511,8 +516,10 @@ tests:eval() {
 # @arg $@ string String to evaluate.
 # @see tests:eval
 tests:pipe() {
-    _tests_eval_and_output_to_fd 301 302 \
-        301>&1 302>&2 "${@}"
+    exec {stdout}>&1
+    exec {stderr}>&2
+
+    _tests_eval_and_output_to_fd ${stdout} ${stderr} "${@}"
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -568,53 +575,97 @@ tests:cd-tmp-dir() {
 #
 # @stdout Unique identifier of running backout process.
 tests:run-background() {
-    local id_var=$1
+    local identifier_var=$1
     shift 2 # for --
 
-    local cmd="$@"
+    local cmd=("${@}")
 
-    local identifier=$(date +'%s.%N' | md5sum | head -c 6)
-    local dir="$_tests_dir/.bg/$identifier/"
+    _tests_prepare_eval_namespace bg
 
-    tests:debug "{START} [BG] #$identifier: workdir at '$dir'"
-    tests:debug "{START} [BG] #$identifier: $ ${cmd[@]}"
+    local identifier=$(cat $_tests_run_id)
+    local run_mode="&"
+    if [ $_tests_verbose -gt 5 ]; then
+        tests:debug "{DEBUG} [BG] #$identifier: TASK WILL RUN IN FOREGROUND"
+        run_mode=""
+    fi
 
-    /bin/mkdir -p "$dir"
 
-    echo "$identifier" > "$dir/id"
-    echo "$cmd" > "$dir/cmd"
+    tests:debug "{START} [BG] #$identifier: ! namespace at '$_tests_run_namespace'"
+    tests:debug "{START} [BG] #$identifier: evaluating command:"
 
-    touch "$dir/stdout"
-    touch "$dir/stderr"
-    touch "$dir/pid"
+    _tests_indent '$' <<< "${cmd[@]}"
 
-    builtin eval "( _tests_run_bg_task $identifier $dir ${cmd[@]} )" \
-        {0..255}\<\&- {0..255}\>\&- \&
+    builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
 
-    local bg_pid=$!
-
-    echo "$bg_pid" > "$dir/pid"
-
-    tests:debug "{START} [BG] #$identifier: started pid:<$bg_pid>"
-
-    builtin eval $id_var=\$identifier
+    builtin eval $identifier_var=\$identifier
 }
 
 _tests_run_bg_task() {
     local identifier=$1
-    local task_dir=$2
+    local cmd_var=$2
+
     shift 2
 
-    _tests_stdout=/dev/null
-    _tests_stderr=/dev/null
-    _tests_exitcode=/dev/null
+    local to_evaluate=()
+
+    builtin eval to_evaluate=\"\${$cmd_var[@]}\"
 
     _tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
 
     exec {_tests_debug_fd}>$_tests_bg_channels/debug
 
-    { "${@}" | tee $_tests_bg_channels/stdout 1>$task_dir/stdout ; } \
-        2>&1 | tee $_tests_bg_channels/stderr 1>$task_dir/stderr
+    tests:debug "{START} [BG] #$identifier: started pid:<$BASHPID>"
+
+    printf "%s\0" "${cmd[@]}" > $_tests_run_cmd
+    printf "%s" "$BASHPID" > $_tests_run_pidfile
+
+    tests:pipe "${cmd[@]}" \
+        1>$_tests_bg_channels/stdout \
+        2>$_tests_bg_channels/stderr
+}
+
+_tests_new_id() {
+    date +'%s.%N' | md5sum | head -c 6
+}
+
+_tests_prepare_eval_namespace() {
+    if [ $_tests_run_clean ]; then
+        if [ "$(cat $_tests_run_clean)" = "1" ]; then
+            return
+        fi
+    fi
+
+    local namespace="$1"
+
+    local identifier=$(_tests_new_id)
+    local dir=$_tests_dir/.ns/$namespace/$identifier
+
+    mkdir -p $dir
+
+    _tests_run_stdout=$dir/stdout
+    _tests_run_stderr=$dir/stderr
+    _tests_run_exitcode=$dir/exitcode
+    _tests_run_pidfile=$dir/pid
+    _tests_run_output=$dir/output
+    _tests_run_cmd=$dir/cmd
+    _tests_run_id=$dir/id
+    _tests_run_clean=$dir/clean
+
+    _tests_run_namespace=$dir
+
+    touch $_tests_run_stderr
+    touch $_tests_run_stdout
+    touch $_tests_run_pidfile
+    touch $_tests_run_exitcode
+    touch $_tests_run_output
+    touch $_tests_run_cmd
+
+    printf "%s" $identifier > $_tests_run_id
+    printf 1 > $_tests_run_clean
+
+    if [ $_tests_verbose -gt 4 ]; then
+        tests:debug "{DEBUG} prepared eval namespace at $dir"
+    fi
 }
 
 # @description Returns pid of specified background process.
@@ -623,7 +674,7 @@ _tests_run_bg_task() {
 #
 # @stdout Pid of background process.
 tests:get-background-pid() {
-    cat "$_tests_dir/.bg/$1/pid"
+    cat "$_tests_dir/.ns/bg/$1/pid"
 }
 
 # @description Returns stdout of specified background process.
@@ -632,7 +683,7 @@ tests:get-background-pid() {
 #
 # @stdout Stdout from background process.
 tests:get-background-stdout() {
-    echo "$_tests_dir/.bg/$1/stdout"
+    echo "$_tests_dir/.ns/bg/$1/stdout"
 }
 
 # @description Returns stderr of specified background process.
@@ -641,7 +692,7 @@ tests:get-background-stdout() {
 #
 # @stdout Stderr from background process.
 tests:background-stderr() {
-    echo "$_tests_dir/.bg/$1/stderr"
+    echo "$_tests_dir/.ns/bg/$1/stderr"
 }
 
 # @description Stops background process with 'kill -9'.
@@ -649,21 +700,43 @@ tests:background-stderr() {
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 tests:stop-background() {
     local id="$1"
-    local pid=$(cat $_tests_dir/.bg/$id/pid)
+    local pid=$(cat $_tests_dir/.ns/bg/$id/pid)
+    if [ -z "$pid" ]; then
+        tests:debug "{STOP} [BG] #$id: PID UNAVAILABLE"
+        return 1
+    fi
 
     tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
+    tests:debug "{STOP} [BG] #$id pid:<$pid> tasks:"
 
-    if ! _tests_pipe kill -TERM "$pid" | _tests_indent 'kill'; then
+    pstree -lp "$pid" | _tests_pipe _tests_indent 'tasks' | _tests_check_empty
+
+    local pids=($(_tests_get_pids_tree $pid))
+
+    _tests_pipe _tests_indent 'pid' <<< "${pids[@]}" | tail -n+2
+
+    if ! _tests_pipe command kill "${pids[@]:-$pid}" \
+        | _tests_indent 'kill'
+    then
         tests:debug "{STOP} [BG] #$id pid:<$pid>: already stopped"
     else
-        local exit_code
-        if _tests_pipe wait $pid | _tests_indent 'wait'; then
-            exit_code=0
-        else
-            exit_code=$?
-        fi
+        local killed
+        local done=false
 
-        tests:debug "{STOP} [BG] #$id pid:<$pid>: stopped: exit $exit_code"
+        while ! $done; do
+            if ! killed=$(command kill -0 "${pids[@]}" 2>&1 | wc -l); then
+                done=true
+            fi
+
+            tests:debug "{STOP} [BG] #$id tasks killed $killed/${#pids[@]}"
+            sleep 0.5
+        done
+
+        if [ "${#killed}" -ne "${#pids[@]}" ]; then
+            if command kill -TERM "${pids[@]}" 2>/dev/null; then
+                tests:debug "{STOP} [BG] #$id pid:<$pid>: TERMINATED"
+            fi
+        fi
     fi
 
     return 0
@@ -677,30 +750,41 @@ tests:stop-background() {
 # @arg $3 int Interval of time to check changes after.
 # @arg $4 int Timeout in seconds.
 tests:wait-file-changes() {
-    local cmd="$1"
-    local file="$2"
-    local sleep_interval="$3"
-    local sleep_max="$4"
+    local file="$1"
+    local sleep_interval="$2"
+    local sleep_max="$3"
+
+    shift 3
+
+    local command="${@}"
 
     local stat_initial=$(stat $file)
     local sleep_iter=0
     local sleep_iter_max=$(bc <<< "$sleep_max/$sleep_interval")
 
-    tests:debug "% waiting file changes after executing cmd: $cmd"
-    tests:eval $cmd
+    tests:debug "! waiting file changes after command: file '$file' (${sleep_max}sec max)"
+
+    if [ $# -gt 0 ]; then
+        "${command[@]}"
+    fi
 
     while true; do
         sleep_iter=$(($sleep_iter+1))
-
         local stat_actual=$(stat $file)
         if [[ "$stat_initial" == "$stat_actual" ]]; then
             if [[ $sleep_iter -ne $sleep_iter_max ]]; then
-                tests:eval sleep $sleep_interval
+                sleep $sleep_interval
                 continue
             fi
 
+            tests:debug "! file left unchanged: file '$file' (after $( \
+                bc <<< "$sleep_iter * $sleep_interval" )sec)"
+
             return 1
         fi
+
+        tests:debug "! file changed: file '$file' (after $( \
+            bc <<< "$sleep_iter * $sleep_interval" )sec)"
 
         return 0
     done
@@ -798,6 +882,14 @@ tests:require() {
         tests:debug "{END} source $file"
     fi
 }
+
+
+tests:colorize() {
+    local type=$1  # unused right now
+    local color=$2
+
+    sed -u -r -e 's/^/\\e[38;5;'${color}'m/' -e 's/$/\\e[0m/'
+}
 # }}}
 
 # Internal Code {{{
@@ -816,16 +908,26 @@ _tests_verbose=0
 _tests_asserts=0
 
 # File with last stdout.
-_tests_stdout=""
+_tests_run_stdout=""
 
 # File with last stderr.
-_tests_stderr=""
+_tests_run_stderr=""
 
 # File with stderr and stout from eval
-_tests_out=""
+_tests_run_output=""
+
+_tests_run_id=""
+
+_tests_run_cmd=""
+
+_tests_run_clean=""
 
 # File with last exitcode.
-_tests_exitcode=""
+_tests_run_exitcode=""
+
+_tests_run_pidfile=""
+
+_tests_run_namespace=""
 
 # Current working directory for test suite.
 _tests_base_dir=""
@@ -841,6 +943,8 @@ _tests_debug_fd="304"
 _tests_bg_channels=""
 
 _tests_debug_prefix=""
+
+_tests_buffering=""
 
 # }}}
 
@@ -866,10 +970,10 @@ _tests_escape_cmd() {
             esac
         done
     else
-        cmd=($1)
+        cmd=("$1")
     fi
 
-    echo "${cmd[@]}"
+    cat <<< "${cmd[@]}"
 }
 
 _tests_pipe() {
@@ -879,8 +983,10 @@ _tests_pipe() {
     }
 }
 
-_tests_eval() {
-    builtin eval "$(_tests_escape_cmd "${@}")"
+_tests_raw_eval() {
+    printf $BASHPID > $_tests_run_pidfile
+
+    builtin eval $_tests_buffering "$(_tests_escape_cmd "${@}")"
 }
 
 _tests_get_debug_fd() {
@@ -899,13 +1005,12 @@ _tests_indent() {
         prefix=""
     fi
 
-    {
-        sed -u \
-            -e "s/^/    ${prefix:+"($prefix) "}/" \
-            -e '1i\ ' \
-            -e '$a\ ' | \
-                sed -e "s/^/$_tests_debug_prefix/"
-    } >&${output}
+    sed -u \
+        -e "s/^/    ${prefix:+"($prefix) "}/" \
+        -e '1i\ ' \
+        -e '$a\ ' | \
+            sed -u -e "s/^/$_tests_debug_prefix/" \
+        >&${output}
 }
 
 _tests_check_empty() {
@@ -926,7 +1031,7 @@ _tests_check_empty() {
         _tests_pipe _tests_indent <<< "<empty>"
     else
         printf "\\${first_byte# }"
-        cat
+        _tests_unbuffer cat
     fi >&${output}
 }
 
@@ -935,7 +1040,7 @@ _tests_quote_re() {
 }
 
 _tests_quote_cmd() {
-    sed -r -e "s/['\`\"]|\\$\{?[0-9#\!?@_\[\]]*\}?/\\\&/g" -e 's/$|^/"/g'
+    sed -r -e "s/['\`\"]|\\$\{?[0-9#\!?@_\[\]]*\}?/\\\&/g" -e '1s/^/"/' -e '$s/$/"/'
 }
 
 _tests_get_testcases() {
@@ -981,6 +1086,8 @@ _tests_run_all() {
     local success=0
     local assertions_count=0
     for file in "${testcases[@]}"; do
+        _tests_set_last "$file"
+
         if [ $verbose -eq 0 ]; then
             local stdout="`mktemp -t stdout.XXXX`"
             local stderr="`mktemp -t stdout.XXXX`"
@@ -1019,7 +1126,6 @@ _tests_run_all() {
                 result=$?
             fi
             if [ $result -ne 0 ]; then
-                _tests_set_last "$file"
                 exit $result
             fi
 
@@ -1037,6 +1143,12 @@ _tests_run_all() {
     echo "$success tests ($assertions_count assertions) done successfully!"
 }
 
+_tests_get_pids_tree() {
+    local main_pid=$1
+
+    pstree -lp $main_pid | grep -oP '\(\d+\)' | grep -oP '\d+'
+}
+
 _tests_show_test_output() {
     local stdout=$1
     local stderr=$2
@@ -1051,8 +1163,6 @@ _tests_show_test_output() {
 
     rm -f $stdout
     rm -f $stderr
-
-    _tests_set_last "$file"
 }
 
 _tests_run_one() {
@@ -1075,10 +1185,10 @@ _tests_run_one() {
     fi
 
     local result
-    if _tests_run_raw "$testcase_file" "$testcase_setup"; then
-        result=0
-    else
+    if ! _tests_run_raw "$testcase_file" "$testcase_setup"; then
         result=$?
+    else
+        result=0
     fi
 
     _tests_asserts=$(cat $_tests_dir/.asserts)
@@ -1103,9 +1213,8 @@ _tests_run_one() {
 _tests_run_raw() {
     local testcase_file="$1"
     local testcase_setup="$2"
-    local exit_code
 
-    if ! (
+    (
         PATH="$_tests_dir/bin:$PATH"
 
         builtin cd $_tests_dir
@@ -1124,21 +1233,16 @@ _tests_run_raw() {
             fi
         fi
 
+        #trap _tests_wait_bg_tasks ERR
+        #trap _tests_wait_bg_tasks EXIT
         builtin source "$testcase_file"
+
+        _tests_wait_bg_tasks
     ) 2>&1 | _tests_indent
-    then
-        exit_code=$?
-    else
-        exit_code=0
-    fi
-
-    _tests_wait_bg_tasks
-
-    return $exit_code
 }
 
 _tests_get_last() {
-    cat .last-testcase
+    cat $_tests_base_dir/.last-testcase
 }
 
 _tests_set_last() {
@@ -1147,21 +1251,21 @@ _tests_set_last() {
 }
 
 _tests_rm_last() {
-    rm -f .last-testcase
+    rm -f $_tests_base_dir/.last-testcase
 }
 
 _tests_run_bg_reader() {
-    local prefix=${1:-""}
+    local prefix=${1:-}
     local pipe=$2
 
     (
         while [ -e $_tests_bg_channels/.active ]; do
             while read line; do
-                if [ $_tests_verbose -gt 3 ]; then
-                    tests:debug "${prefix:+"($prefix) "}$line"
+                if [ $_tests_verbose -gt 4 ]; then
+                    _tests_pipe tests:debug "${prefix:+"($prefix) "}$line"
                 fi
             done < $pipe
-        done
+        done | _tests_indent
     ) &
 }
 
@@ -1170,16 +1274,9 @@ _tests_init() {
 
     /bin/mkdir $_tests_dir/bin
 
-    _tests_stderr="$_tests_dir/.stderr"
-    _tests_stdout="$_tests_dir/.stdout"
-    _tests_exitcode="$_tests_dir/.exitcode"
-    _tests_out="$_tests_dir/.eval"
-    _tests_bg_channels="$_tests_dir/.bg-channels/"
+    _tests_prepare_eval_namespace eval
 
-    touch $_tests_stderr
-    touch $_tests_stdout
-    touch $_tests_exitcode
-    touch $_tests_out
+    _tests_bg_channels="$_tests_dir/.bg-channels/"
 
     mkdir -p $_tests_bg_channels
 
@@ -1191,10 +1288,9 @@ _tests_init() {
 
     _tests_run_bg_reader "bg stderr" $_tests_bg_channels/stderr
     _tests_run_bg_reader "bg stdout" $_tests_bg_channels/stdout
-    _tests_run_bg_reader "" $_tests_bg_channels/debug
+    _tests_run_bg_reader "bg debug" $_tests_bg_channels/debug
 
-    #set -x
-    tests:debug "{BEGIN} TEST SESSION"
+    tests:debug "{BEGIN} TEST SESSION AT $_tests_dir"
 }
 
 _tests_cleanup() {
@@ -1219,7 +1315,7 @@ _tests_cleanup() {
 }
 
 _tests_wait_bg_tasks() {
-    for bg_dir in $_tests_dir/.bg/*; do
+    for bg_dir in $_tests_dir/.ns/bg/*; do
         if ! test -d $bg_dir; then
             continue
         fi
@@ -1234,7 +1330,9 @@ _tests_wait_bg_tasks() {
             local bg_stderr=$bg_dir/stderr
 
 
-            tests:debug "{STOP} [BG] #$bg_id: $ $bg_cmd"
+            tests:debug "{STOP} [BG] #$bg_id: command was:"
+
+            _tests_indent '$' <<< "$bg_cmd"
 
             tests:debug "{STOP} [BG] #$bg_id stdout:"
             _tests_pipe _tests_indent 'stdout' < "$bg_stdout" \
@@ -1245,6 +1343,8 @@ _tests_wait_bg_tasks() {
                 | _tests_check_empty
         fi
     done
+
+    return 0
 }
 
 _tests_interrupt() {
@@ -1253,6 +1353,8 @@ _tests_interrupt() {
 
 _tests_make_assertion() {
     local assertion_name=$3
+
+    tests:debug "assertion ($assertion_name): should be $_tests_assert_operation"
 
     local result
     if test "$1" $_tests_assert_operation "$2"; then
@@ -1291,51 +1393,66 @@ _tests_inc_asserts_count() {
     echo $(($count+1)) > $_tests_dir/.asserts
 }
 
+_tests_unbuffer() {
+    stdbuf -o0 -i0 -e0 "${@}"
+}
+
 _tests_eval_and_output_to_fd() {
     local stdout=$1
     local stderr=$2
 
     shift 2
 
+    if [ $_tests_verbose -gt 4 ]; then
+        tests:debug "{DEBUG} namespace ID: $_tests_run_id"
+    fi
+
     local input=/dev/stdin
 
     if [ -s "$input" ]; then
-        tests:debug "$ (stdin) > $@"
+        tests:debug "(stdin) evaluating command:"
     else
         input=/dev/null
 
-        tests:debug "$ $@"
+        tests:debug "evaluating command:"
     fi
+
+    _tests_pipe _tests_indent '$' <<< "${@}" | head -n-1 >$_tests_debug_fd
 
     if [ $_tests_verbose -gt 3 ]; then
         _tests_escape_cmd "${@}" | _tests_indent 'eval'
     fi
 
+    if [ $(_tests_get_debug_fd) -eq 2 ]; then
+        exec {_tests_debug_fd}>&2
+    fi
+
+    _tests_prepare_eval_namespace eval
+
+    printf 0 > $_tests_run_clean
+
     {
-        if [ "$(_tests_get_debug_fd)" = "2" ]; then
-            exec {_tests_debug_fd}>&2
-        fi
+        exec {stdin_debug}>&1
 
-        {
-            {
-                if _tests_eval_and_capture_output "${@}"; then
-                    echo 0 > $_tests_exitcode
-                else
-                    echo $? > $_tests_exitcode
-                fi < <(tee >(cat >&303) < $input) 1>&${stdout} 2>&${stderr}
+        if _tests_eval_and_capture_output "${@}"; then
+            echo 0 > $_tests_run_exitcode
+        else
+            echo $? > $_tests_run_exitcode
+        fi < <(tee >(cat >&${stdin_debug}) < $input) 1>&${stdout} 2>&${stderr}
 
-            } 303>&1 | _tests_pipe _tests_indent 'stdin' | tail -n+2 >&2
-        }
-    }
+    } | _tests_pipe _tests_indent 'stdin' \
+        | _tests_unbuffer tail -n+2 >&${_tests_debug_fd}
 
     if [ $_tests_verbose -gt 1 ]; then
-        tests:debug "evaluation stdout:"
-        _tests_pipe _tests_indent 'stdout' < $_tests_stdout | _tests_check_empty
+        tests:debug "evaluation stdout: $_tests_run_stdout"
+        _tests_pipe _tests_indent 'stdout' < $_tests_run_stdout \
+            | _tests_check_empty
     fi
 
     if [ $_tests_verbose -gt 1 ]; then
         tests:debug "evaluation stderr:"
-        _tests_pipe _tests_indent 'stderr' < $_tests_stderr | _tests_check_empty
+        _tests_pipe _tests_indent 'stderr' < $_tests_run_stderr \
+            | _tests_check_empty
     fi
 }
 
@@ -1345,9 +1462,9 @@ _tests_eval_and_capture_output() {
 
         case $_tests_verbose in
             0|1)
-                _tests_eval "${@}" \
-                    > $_tests_stdout \
-                    2> $_tests_stderr
+                _tests_raw_eval "${@}" \
+                    > $_tests_run_stdout \
+                    2> $_tests_run_stderr
                 ;;
             2)
                 # Process substitution will not work there, because
@@ -1357,19 +1474,19 @@ _tests_eval_and_capture_output() {
                 #
                 # `true` will exit no matter running sleep, and hello will
                 # be shown only after 1 second pass.
-                { _tests_eval "${@}" \
-                    | tee $_tests_stdout 1>&3; exit ${PIPESTATUS[0]}; } \
-                    2> $_tests_stderr 3>&1
+                { _tests_raw_eval "${@}" \
+                    | tee $_tests_run_stdout 1>&3; exit ${PIPESTATUS[0]}; } \
+                    2> $_tests_run_stderr 3>&1
                 ;;
             *)
-                # We need to return exitcode of _tests_eval, not tee, so
+                # We need to return exitcode of _tests_raw_eval, not tee, so
                 # we need to use PIPESTATUS[0] which will be equal to exitcode
-                # of _tests_eval.
+                # of _tests_raw_eval.
                 #
                 # It's required, because -o pipefail is not set here.
-                { { _tests_eval "${@}" \
-                    | tee $_tests_stdout 1>&3; exit ${PIPESTATUS[0]}; } 2>&1 \
-                    | tee $_tests_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
+                { { _tests_raw_eval "${@}" \
+                    | tee $_tests_run_stdout 1>&3; exit ${PIPESTATUS[0]}; } 2>&1 \
+                    | tee $_tests_run_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
                 ;;
         esac
     )
