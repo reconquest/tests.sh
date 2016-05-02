@@ -654,11 +654,16 @@ tests:stop-background() {
     fi
 
     tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
+
+    local pids
+    if ! pids=($(_tests_get_pids_tree $pid)); then
+        tests:debug "! no tasks available"
+        return
+    fi
+
     tests:debug "{STOP} [BG] #$id pid:<$pid> tasks:"
 
     pstree -lp "$pid" | _tests_pipe _tests_indent 'tasks' | _tests_check_empty
-
-    local pids=($(_tests_get_pids_tree $pid))
 
     _tests_pipe _tests_indent 'pid' <<< "${pids[@]}" | tail -n+2
 
@@ -1342,7 +1347,7 @@ _tests_wait_bg_tasks() {
         tests:stop-background $bg_id
 
         if [ -e "$_tests_dir/.failed" -o $_tests_verbose -gt 3 ]; then
-            local bg_cmd=$(cat $bg_dir/cmd)
+            local bg_cmd=$(echo $(xargs -0 -n1 < $bg_dir/cmd))
             local bg_stdout=$bg_dir/stdout
             local bg_stderr=$bg_dir/stderr
 
@@ -1461,7 +1466,7 @@ _tests_eval_and_output_to_fd() {
         | _tests_unbuffer tail -n+2 >&${_tests_debug_fd}
 
     if [ $_tests_verbose -gt 1 ]; then
-        tests:debug "evaluation stdout: $_tests_run_stdout"
+        tests:debug "evaluation stdout:"
         _tests_pipe _tests_indent 'stdout' < $_tests_run_stdout \
             | _tests_check_empty
     fi
