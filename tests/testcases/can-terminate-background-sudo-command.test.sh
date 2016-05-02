@@ -6,7 +6,7 @@ tests:eval touch \$file
 echo_bg_pid() {
     tests:run-background id -- "
         bash -c '
-            bash -c \"
+            sudo bash -c \"
                 echo MYPID:\\\\$\\\\$
                 touch \$file
                 watch -n1 : >/dev/null

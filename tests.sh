@@ -662,27 +662,31 @@ tests:stop-background() {
 
     _tests_pipe _tests_indent 'pid' <<< "${pids[@]}" | tail -n+2
 
-    if ! _tests_pipe command kill "${pids[@]:-$pid}" \
-        | _tests_indent 'kill'
+    local kill_command=kill
+
+    local killed
+    local done=false
+
+    local kill_output
+    if command $kill_command -0 "${pids[@]}" 2>&1 \
+            | grep -qF 'not permitted'
     then
-        tests:debug "{STOP} [BG] #$id pid:<$pid>: already stopped"
-    else
-        local killed
-        local done=false
+        tests:debug "! killing with sudo"
+        kill_command="sudo kill"
+    fi
 
-        while ! $done; do
-            if ! killed=$(command kill -0 "${pids[@]}" 2>&1 | wc -l); then
-                done=true
-            fi
+    while ! $done; do
+        if ! killed=$(command $kill_command "${pids[@]}" 2>&1| wc -l); then
+            done=true
+        fi
 
-            tests:debug "{STOP} [BG] #$id tasks killed $killed/${#pids[@]}"
-            sleep 0.5
-        done
+        tests:debug "{STOP} [BG] #$id tasks killed $killed/${#pids[@]}"
+        sleep 0.5
+    done
 
-        if [ "${#killed}" -ne "${#pids[@]}" ]; then
-            if command kill -TERM "${pids[@]}" 2>/dev/null; then
-                tests:debug "{STOP} [BG] #$id pid:<$pid>: TERMINATED"
-            fi
+    if [ "${#killed}" -ne "${#pids[@]}" ]; then
+        if command kill -TERM "${pids[@]}" 2>/dev/null; then
+            tests:debug "{STOP} [BG] #$id pid:<$pid>: TERMINATED"
         fi
     fi
 
