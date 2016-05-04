@@ -760,7 +760,7 @@ tests:set-verbose() {
 #
 # @arg $@ any Same args, as for cp commmand.
 tests:clone() {
-    local args=(dummy)
+    local args=()
     local last_arg=""
 
     while [ $# -gt 0 ]; do
@@ -771,7 +771,7 @@ tests:clone() {
         last_arg=""
 
         if grep -q '^-' <<< "$1"; then
-            args=($args $1)
+            args+=($1)
         else
             last_arg=$1
         fi
@@ -779,16 +779,15 @@ tests:clone() {
         shift
     done
 
-    local files="${args[@]:1}"
     local dest="$_tests_dir/$last_arg"
 
     if [ $_tests_verbose -gt 2 ]; then
-        tests:debug "\$ cp $files $dest"
+        tests:debug "\$ cp ${args[@]} $dest"
     fi
 
     local stderr
-    if ! stderr=$(/bin/cp "$files" "$dest" 2>&1); then
-        tests:debug "error copying: cp $files $dest:"
+    if ! stderr=$(/bin/cp "${args[@]}" "$dest" 2>&1); then
+        tests:debug "error copying: cp ${args[@]} $dest:"
         _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
     fi
