@@ -4,4 +4,4 @@ EOF
 
 
 ensure tests.sh -d testcases -Avvvv
-assert-stderr-re '^\s+# /tmp/[^/]+: hello from inner world'
+assert-stderr-re '^\s+# hello from inner world'

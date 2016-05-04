@@ -118,6 +118,8 @@ tests:match-re() {
         file=$_tests_run_stderr
     fi
 
+    tests:debug XXXXX $file
+
     if [ -z "$regexp" ]; then
         if [ -s $file ]; then
             echo 1
@@ -514,6 +516,10 @@ tests:runtime() {
 
     exec {output}>$_tests_run_output
 
+    # because of pipe, environment variables will not bubble out of
+    # _tests_eval_and_output_to_fd call
+    _tests_prepare_eval_namespace eval
+
     { { _tests_eval_and_output_to_fd ${output} ${output} "${@}" \
         {output}>&1 | _tests_indent 'stdout' ; } \
         {output}>&1 | _tests_indent 'stderr' ; }
@@ -604,7 +610,6 @@ tests:run-background() {
         run_mode=""
     fi
 
-
     tests:debug "{START} [BG] #$identifier: ! namespace at '$_tests_run_namespace'"
     tests:debug "{START} [BG] #$identifier: evaluating command:"
 
@@ -655,45 +660,42 @@ tests:stop-background() {
 
     tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
 
-    local pids
-    if ! pids=($(_tests_get_pids_tree $pid)); then
-        tests:debug "! no tasks available"
-        return
-    fi
-
-    tests:debug "{STOP} [BG] #$id pid:<$pid> tasks:"
-
-    pstree -lp "$pid" | _tests_pipe _tests_indent 'tasks' | _tests_check_empty
-
-    _tests_pipe _tests_indent 'pid' <<< "${pids[@]}" | tail -n+2
-
-    local kill_command=kill
-
-    local killed
-    local done=false
-
-    local kill_output
-    if command $kill_command -0 "${pids[@]}" 2>&1 \
-            | grep -qF 'not permitted'
-    then
-        tests:debug "! killing with sudo"
-        kill_command="sudo kill"
-    fi
-
-    while ! $done; do
-        if ! killed=$(command $kill_command "${pids[@]}" 2>&1| wc -l); then
-            done=true
+    while [ ! -e $_tests_dir/.ns/bg/$id/done ]; do
+        local -a pids=()
+        if ! pids=($(_tests_get_pids_tree $pid)); then
+            break
         fi
 
-        tests:debug "{STOP} [BG] #$id tasks killed $killed/${#pids[@]}"
+        if [ ${#pids[@]} -lt 2 ]; then
+            continue
+        fi
+
+        local childs=(${pids[@]:1})
+
+        tests:debug "{STOP} [BG] #$id pid:<$pid> tasks:"
+
+        _tests_pipe _tests_indent 'pid' <<< "${childs[@]}" | head -n+2
+
+        pstree -lp "$pid" | _tests_pipe _tests_indent 'tasks' \
+            | _tests_check_empty
+
+        local kill_command=kill
+
+        if command $kill_command -0 "${childs[@]}" 2>&1 \
+            | grep -qF 'not permitted'
+        then
+            tests:debug "! killing with sudo"
+            kill_command="sudo kill"
+        fi
+
+        command $kill_command "${childs[@]}" 2>/dev/null || true
+
         sleep 0.5
+
+        command $kill_command -TERM "${childs[@]}" 2>/dev/null || true
     done
 
-    if [ "${#killed}" -ne "${#pids[@]}" ]; then
-        if command kill -TERM "${pids[@]}" 2>/dev/null; then
-            tests:debug "{STOP} [BG] #$id pid:<$pid>: TERMINATED"
-        fi
-    fi
+    kill $pid 2>/dev/null || true
 
     return 0
 }
@@ -1141,10 +1143,10 @@ _tests_run_one() {
     fi
 
     local result
-    if ! _tests_run_raw "$testcase_file" "$testcase_setup"; then
-        result=$?
-    else
+    if _tests_run_raw "$testcase_file" "$testcase_setup"; then
         result=0
+    else
+        result=$?
     fi
 
     _tests_asserts=$(cat $_tests_dir/.asserts)
@@ -1217,6 +1219,8 @@ _tests_run_bg_task() {
     tests:pipe "${cmd[@]}" \
         1>$_tests_bg_channels/stdout \
         2>$_tests_bg_channels/stderr
+
+    touch $_tests_run_donefile
 }
 
 _tests_new_id() {
@@ -1241,6 +1245,7 @@ _tests_prepare_eval_namespace() {
     _tests_run_stderr=$dir/stderr
     _tests_run_exitcode=$dir/exitcode
     _tests_run_pidfile=$dir/pid
+    _tests_run_donefile=$dir/done
     _tests_run_output=$dir/output
     _tests_run_cmd=$dir/cmd
     _tests_run_id=$dir/id
@@ -1351,7 +1356,6 @@ _tests_wait_bg_tasks() {
             local bg_stdout=$bg_dir/stdout
             local bg_stderr=$bg_dir/stderr
 
-
             tests:debug "{STOP} [BG] #$bg_id: command was:"
 
             _tests_indent '$' <<< "$bg_cmd"
@@ -1425,9 +1429,13 @@ _tests_eval_and_output_to_fd() {
 
     shift 2
 
+    _tests_prepare_eval_namespace eval
+
     if [ $_tests_verbose -gt 4 ]; then
         tests:debug "{DEBUG} namespace ID: $_tests_run_id"
     fi
+
+    printf 0 > $_tests_run_clean
 
     local input=/dev/stdin
 
@@ -1448,10 +1456,6 @@ _tests_eval_and_output_to_fd() {
     if [ $(_tests_get_debug_fd) -eq 2 ]; then
         exec {_tests_debug_fd}>&2
     fi
-
-    _tests_prepare_eval_namespace eval
-
-    printf 0 > $_tests_run_clean
 
     {
         exec {stdin_debug}>&1
@@ -1721,7 +1725,7 @@ EOF
 }
 
 
-__main__() {
+tests:main() {
     _tests_base_dir=$(pwd)
 
     local testcases_dir="."
@@ -1800,5 +1804,5 @@ __main__() {
 
 
 if [ "$(basename $0)" == "tests.sh" ]; then
-    __main__ "${@}"
+    tests:main "${@}"
 fi
