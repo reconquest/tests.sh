@@ -118,8 +118,6 @@ tests:match-re() {
         file=$_tests_run_stderr
     fi
 
-    tests:debug XXXXX $file
-
     if [ -z "$regexp" ]; then
         if [ -s $file ]; then
             echo 1
