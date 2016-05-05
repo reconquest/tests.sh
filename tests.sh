@@ -1226,7 +1226,7 @@ _tests_new_id() {
 
 _tests_prepare_eval_namespace() {
     if [ $_tests_run_clean ]; then
-        if [ "$(cat $_tests_run_clean)" = "1" ]; then
+        if [ "$(cat $_tests_run_clean 2>/dev/null)" = "1" ]; then
             return
         fi
     fi
