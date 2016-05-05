@@ -8,12 +8,14 @@ EOF
 
 ensure tests.sh -vvvv -d testcases -A
 
-sed -nre '/\(stdin\) evaluating command/,+16 { s/(stdout) //; p }' \
+sed -nre '/\(stdin\) evaluating command/,+18 { s/(stdout) //; p }' \
     $(tests:get-stderr-file) \
         | put actual.output
 
 put expected.output <<EOF
 # (stdin) evaluating command:
+
+    ($) cat -n
 
     (eval) "cat" "-n"
 

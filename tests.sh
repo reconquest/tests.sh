@@ -1444,14 +1444,14 @@ _tests_eval_and_output_to_fd() {
         tests:debug "evaluating command:"
     fi
 
-    _tests_pipe _tests_indent '$' <<< "${@}" | head -n-1 >$_tests_debug_fd
+    if [ $(_tests_get_debug_fd) -eq 2 ]; then
+        exec {_tests_debug_fd}>&2
+    fi
+
+    _tests_pipe _tests_indent '$' <<< "${@}" | head -n-1 >&$_tests_debug_fd
 
     if [ $_tests_verbose -gt 3 ]; then
         _tests_escape_cmd "${@}" | _tests_indent 'eval'
-    fi
-
-    if [ $(_tests_get_debug_fd) -eq 2 ]; then
-        exec {_tests_debug_fd}>&2
     fi
 
     {
