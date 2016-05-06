@@ -1729,6 +1729,8 @@ tests:main() {
     local testcases_setup=""
     local see_subdirs=false
 
+    OPTIND=
+
     while getopts ":his:d:va" arg "${@}"; do
         case $arg in
             d)
@@ -1756,7 +1758,7 @@ tests:main() {
         esac
     done
 
-    local OPTIND
+    OPTIND=
 
     while getopts ":his:d:vaAO" arg "${@}"; do
         case $arg in
