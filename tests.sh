@@ -1023,6 +1023,7 @@ _tests_run_all() {
         echo no testcases found.
 
         exit 1
+        return 1
     fi
 
 
@@ -1072,6 +1073,7 @@ _tests_run_all() {
                 echo
 
                 exit $result
+                return $result
             fi
         else
             local result
@@ -1082,6 +1084,7 @@ _tests_run_all() {
             fi
             if [ $result -ne 0 ]; then
                 exit $result
+                return $result
             fi
 
             success=$((success+1))
@@ -1181,6 +1184,7 @@ _tests_run_raw() {
 
             if ! tests:involve "$testcase_setup"; then
                 exit 1
+                return 1
             fi
 
             if [ $_tests_verbose -gt 2 ]; then
@@ -1742,10 +1746,12 @@ tests:main() {
             i)
                 _tests_print_docs
                 exit $?
+                return $?
                 ;;
             h)
                 _tests_show_usage
                 exit 1
+                return 1
                 ;;
             a)
                 see_subdirs=true
@@ -1767,6 +1773,7 @@ tests:main() {
                     "$testcases_dir" "$testcases_setup" $see_subdirs
 
                 exit $?
+                return $?
                 ;;
             O)
                 if [ $_tests_verbose -eq 0 ]; then
@@ -1785,14 +1792,17 @@ tests:main() {
                 for name in "${files[@]}"; do
                     if ! _tests_run_one "$name" "$testcases_setup"; then
                         exit 1
+                        return 1
                     fi
                 done
 
                 exit $?
+                return $?
                 ;;
             h)
                 _tests_show_usage
                 exit 1
+                return 1
                 ;;
         esac
     done
