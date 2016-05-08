@@ -694,7 +694,8 @@ tests:stop-background() {
                 continue
             fi
 
-            _kill_task "$task_pid"
+            _kill_task "$task_pid" &
+            wait $!
         done
     done
 
@@ -718,7 +719,12 @@ _kill_task() {
 
     (
         sleep 0.5
-        command $kill_command "$1" -TERM 2>/dev/null || true
+        if command $kill_command "$1" -9 2>/dev/null; then
+            tests:debug fg 1 tests:debug "TERMINATED: $pid"
+        else
+            tests:debug "killed: $pid"
+        fi
+
     ) &
 }
 
@@ -1003,7 +1009,7 @@ _tests_run_all() {
     fi
 
     local testcases=($(_tests_get_testcases "$testcases_dir" "$filemask"))
-    if [ ! -v testcases ]; then
+    if [ "${#testcases[@]}" -eq 0 ]; then
         echo no testcases found.
 
         exit 1
@@ -1198,9 +1204,6 @@ _tests_run_bg_task() {
     exec {_tests_debug_fd}>$_tests_bg_channels/debug
 
     tests:debug "{START} [BG] #$identifier: started pid:<$BASHPID>"
-
-    printf "%s\0" "${cmd[@]}" > $_tests_run_cmd
-    #printf "%s" "$BASHPID" > $_tests_run_pidfile
 
     tests:pipe "${cmd[@]}" \
         1>$_tests_bg_channels/stdout \

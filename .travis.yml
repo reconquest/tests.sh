@@ -1,0 +1,3 @@
+language: bash
+sudo: required
+script: ./run_tests.sh
