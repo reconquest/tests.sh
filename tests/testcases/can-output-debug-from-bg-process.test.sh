@@ -1,9 +1,15 @@
 put testcases/output-debug-from-bg.test.sh <<EOF
-tests:run-background id -- tests:pipe 'tests:debug "hello"'
+file=\$(tests:get-tmp-dir)/done
 
-tests:assert-success false
+tests:eval touch \$file
+
+run-bg() {
+    tests:run-background id -- tests:pipe 'tests:debug "hello" && touch \$file'
+}
+
+tests:wait-file-changes \$file 0.01 10 run-bg
 EOF
 
-not ensure tests.sh -d testcases -Avvvvv
+not runtime tests.sh -d testcases -Avvvvv
 
 assert-stderr-re '^.*#.*\(bg debug\).*\[BG\].*pid:\<\d+\>.*#\w+: hello'

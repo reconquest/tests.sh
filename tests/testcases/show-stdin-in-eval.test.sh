@@ -10,7 +10,7 @@ ensure tests.sh -vvvv -d testcases -A
 
 sed -nre '/\(stdin\) evaluating command/,+18 { s/(stdout) //; p }' \
     $(tests:get-stderr-file) \
-        | put actual.output
+        | tests:remove-colors | put actual.output
 
 put expected.output <<EOF
 # (stdin) evaluating command:

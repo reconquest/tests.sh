@@ -110,6 +110,10 @@ tests:match-re() {
     local regexp="$2"
     shift 2
 
+    if [ ! "$_tests_run_exitcode" ]; then
+        _tests_prepare_eval_namespace match
+    fi
+
     if [ -f $target ]; then
         file=$target
     elif [ "$target" = "stdout" ]; then
@@ -181,7 +185,7 @@ tests:assert-no-diff() {
 
     local actual_target="$1"
     shift
-    local options="-u $@"
+    local options=(-u $@)
 
     if [ -e "$expected_target" ]; then
         expected_content="$(cat $expected_target)"
@@ -201,7 +205,7 @@ tests:assert-no-diff() {
 
     local diff
     local result=0
-    if diff=$(diff `echo $options` \
+    if diff=$(diff ${options[@]} \
             <(echo -e "$expected_content") \
             <(echo -e "$actual_content")); then
         result=0
@@ -319,7 +323,7 @@ tests:put() {
 
     if [ $_tests_verbose -gt 2 ]; then
         tests:debug "wrote the file $file with content:"
-        _tests_indent 'file' < $file
+        tests:colorize fg 208 _tests_indent 'file' < $file
     fi
 
 }
@@ -436,8 +440,13 @@ tests:debug() {
         return
     fi
 
+    local prefix=$_tests_debug_prefix
+    if [ $_tests_verbose -ge 6 ]; then
+        prefix="<$BASHPID> $prefix"
+    fi
+
     if [ "$_tests_dir" ]; then
-        echo -e "${_tests_debug_prefix:-# }$@"
+        echo -e "# ${prefix# }$@"
     else
         echo -e "### $@"
     fi >&${output}
@@ -497,6 +506,8 @@ tests:cd() {
 # @see tests:pipe
 # @see tests:runtime
 tests:eval() {
+    _tests_prepare_eval_namespace eval
+
     exec {output}>$_tests_run_output
 
     _tests_eval_and_output_to_fd ${output} ${output} "${@}"
@@ -512,6 +523,8 @@ tests:eval() {
 tests:runtime() {
     _tests_buffering="stdbuf -e0 -i0 -o0 "
 
+    _tests_prepare_eval_namespace eval
+
     exec {output}>$_tests_run_output
 
     # because of pipe, environment variables will not bubble out of
@@ -519,8 +532,8 @@ tests:runtime() {
     _tests_prepare_eval_namespace eval
 
     { { _tests_eval_and_output_to_fd ${output} ${output} "${@}" \
-        {output}>&1 | _tests_indent 'stdout' ; } \
-        {output}>&1 | _tests_indent 'stderr' ; }
+        {output}>&1 | _tests_indent 'runtime stdout' ; } \
+        {output}>&1 | _tests_indent 'runtime stderr' ; }
 
     _tests_buffering=""
 }
@@ -603,19 +616,23 @@ tests:run-background() {
 
     local identifier=$(cat $_tests_run_id)
     local run_mode="&"
-    if [ $_tests_verbose -gt 5 ]; then
+    if [ $_tests_verbose -gt 6 ]; then
         tests:debug "{DEBUG} [BG] #$identifier: TASK WILL RUN IN FOREGROUND"
         run_mode=""
     fi
 
-    tests:debug "{START} [BG] #$identifier: ! namespace at '$_tests_run_namespace'"
+    tests:debug "{START} [BG] #$identifier: ! at '$_tests_run_namespace'"
     tests:debug "{START} [BG] #$identifier: evaluating command:"
 
-    _tests_indent '$' <<< "${cmd[@]}"
+    _tests_pipe tests:colorize fg 5 _tests_indent '$' <<< "${cmd[@]}"
 
     builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
 
     builtin eval $identifier_var=\$identifier
+
+    while [ "$(cat $_tests_run_pidfile)" = "" ]; do
+        :
+    done
 }
 
 # @description Returns pid of specified background process.
@@ -658,44 +675,51 @@ tests:stop-background() {
 
     tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
 
+    local main_exe="$(readlink -f /proc/$pid/exe)"
+
     while [ ! -e $_tests_dir/.ns/bg/$id/done ]; do
         local -a pids=()
         if ! pids=($(_tests_get_pids_tree $pid)); then
             break
         fi
 
+
         if [ ${#pids[@]} -lt 2 ]; then
             continue
         fi
 
-        local childs=(${pids[@]:1})
+        for task_pid in "${pids[@]}"; do
+            local exe="$(readlink -f /proc/$task_pid/exe)"
+            if [ "$exe" = "$main_exe" ]; then
+                continue
+            fi
 
-        tests:debug "{STOP} [BG] #$id pid:<$pid> tasks:"
-
-        _tests_pipe _tests_indent 'pid' <<< "${childs[@]}" | head -n+2
-
-        pstree -lp "$pid" | _tests_pipe _tests_indent 'tasks' \
-            | _tests_check_empty
-
-        local kill_command=kill
-
-        if command $kill_command -0 "${childs[@]}" 2>&1 \
-            | grep -qF 'not permitted'
-        then
-            tests:debug "! killing with sudo"
-            kill_command="sudo kill"
-        fi
-
-        command $kill_command "${childs[@]}" 2>/dev/null || true
-
-        sleep 0.5
-
-        command $kill_command -TERM "${childs[@]}" 2>/dev/null || true
+            _kill_task "$task_pid"
+        done
     done
 
-    kill $pid 2>/dev/null || true
-
     return 0
+}
+
+_kill_task() {
+    local pid="$1"
+
+    local kill_command=kill
+    if { command $kill_command "$pid" || true; } 2>&1 \
+        | grep -q 'not permitted'
+    then
+        tests:debug "! killing with sudo"
+        kill_command="sudo kill"
+    fi
+
+    tests:debug "$kill_command $pid"
+
+    command $kill_command "$1" 2>/dev/null || true
+
+    (
+        sleep 0.5
+        command $kill_command "$1" -TERM 2>/dev/null || true
+    ) &
 }
 
 # @description Waits, until specified file will be changed or timeout passed
@@ -843,7 +867,20 @@ tests:colorize() {
     local type=$1  # unused right now
     local color=$2
 
-    sed -u -r -e 's/^/\\e[38;5;'${color}'m/' -e 's/$/\\e[0m/'
+    shift 2
+
+    local output=$(_tests_get_debug_fd)
+
+    local esc=$(echo -en '\e')
+
+    _tests_pipe "${@}" \
+        | sed -u -r -e "s/^/$esc[38;5;"${color}'m/' -e "s/$/$esc[0m/" >&$output
+}
+
+tests:remove-colors() {
+    local esc=$(echo -en '\e')
+
+    sed -ure "s/$esc\[[^m]+m//g"
 }
 # }}}
 
@@ -1139,9 +1176,10 @@ _tests_run_raw() {
             fi
         fi
 
+        trap _tests_wait_bg_tasks EXIT
         builtin source "$testcase_file"
 
-        _tests_wait_bg_tasks
+        exit $?
     ) 2>&1 | _tests_indent
 }
 
@@ -1162,7 +1200,7 @@ _tests_run_bg_task() {
     tests:debug "{START} [BG] #$identifier: started pid:<$BASHPID>"
 
     printf "%s\0" "${cmd[@]}" > $_tests_run_cmd
-    printf "%s" "$BASHPID" > $_tests_run_pidfile
+    #printf "%s" "$BASHPID" > $_tests_run_pidfile
 
     tests:pipe "${cmd[@]}" \
         1>$_tests_bg_channels/stdout \
@@ -1176,13 +1214,15 @@ _tests_new_id() {
 }
 
 _tests_prepare_eval_namespace() {
-    if [ $_tests_run_clean ]; then
+    local namespace="$1"
+
+    if [ "$_tests_run_clean" ]; then
         if [ "$(cat $_tests_run_clean 2>/dev/null)" = "1" ]; then
-            return
+            #if [ "$namespace" = "${_tests_run_namespace##*/}" ]; then
+                return
+            #fi
         fi
     fi
-
-    local namespace="$1"
 
     local identifier=$(_tests_new_id)
     local dir=$_tests_dir/.ns/$namespace/$identifier
@@ -1248,8 +1288,6 @@ _tests_init() {
     _tests_dir="$(mktemp -t -d tests.XXXX)"
 
     /bin/mkdir $_tests_dir/bin
-
-    _tests_prepare_eval_namespace eval
 
     _tests_bg_channels="$_tests_dir/.bg-channels/"
 
@@ -1328,7 +1366,18 @@ _tests_interrupt() {
 _tests_make_assertion() {
     local assertion_name=$3
 
-    tests:debug "assertion ($assertion_name): should be $_tests_assert_operation"
+    local assertion_type="$_tests_assert_operation"
+
+    case "$_tests_assert_operation" in
+        =)
+            assertion_type="positive"
+            ;;
+        !=)
+            assertion_type="negative"
+            ;;
+    esac
+
+    tests:debug "assertion ($assertion_name): $assertion_type expectation"
 
     local result
     if test "$1" $_tests_assert_operation "$2"; then
@@ -1341,21 +1390,20 @@ _tests_make_assertion() {
 
     if [ $result -gt 0 ]; then
         touch "$_tests_dir/.failed"
-        tests:debug "assertion ($assertion_name): failed"
+        tests:colorize fg 1 tests:debug "assertion ($assertion_name): failed"
     fi
 
     if [ $_tests_verbose -gt 3 -o $result -gt 0 ]; then
         if [ $result -eq 0 ]; then
-            tests:debug "assertion ($assertion_name): success"
+            tests:colorize fg 2 tests:debug "assertion ($assertion_name): success"
         fi
 
         while [ $# -gt 0 ]; do
-            tests:debug "assertion ($assertion_name): $1"
+            tests:colorize fg 24 tests:debug "assertion ($assertion_name): $1"
 
             shift
         done
     fi
-
 
     if [ $result -gt 0 ]; then
         _tests_interrupt
@@ -1399,10 +1447,13 @@ _tests_eval_and_output_to_fd() {
         exec {_tests_debug_fd}>&2
     fi
 
-    _tests_pipe _tests_indent '$' <<< "${@}" | head -n-1 >&$_tests_debug_fd
+    _tests_pipe tests:colorize fg 5 _tests_indent '$' <<< "${@}" \
+        | head -n-1 >&$_tests_debug_fd
 
     if [ $_tests_verbose -gt 3 ]; then
-        _tests_escape_cmd "${@}" | _tests_indent 'eval'
+        _tests_escape_cmd "${@}" \
+            | _tests_pipe tests:colorize fg 5 _tests_indent 'eval' \
+            >&$_tests_debug_fd
     fi
 
     {
@@ -1415,17 +1466,23 @@ _tests_eval_and_output_to_fd() {
         fi < <(tee >(cat >&${stdin_debug}) < $input) 1>&${stdout} 2>&${stderr}
 
     } | _tests_pipe _tests_indent 'stdin' \
-        | _tests_unbuffer tail -n+2 >&${_tests_debug_fd}
+        | _tests_unbuffer tail -n+2 \
+        | _tests_unbuffer head -n-1 \
+        >&${_tests_debug_fd}
+
+    echo >&$_tests_debug_fd
 
     if [ $_tests_verbose -gt 1 ]; then
         tests:debug "evaluation stdout:"
-        _tests_pipe _tests_indent 'stdout' < $_tests_run_stdout \
+        _tests_pipe tests:colorize fg 107 _tests_indent 'stdout' \
+            < $_tests_run_stdout \
             | _tests_check_empty
     fi
 
     if [ $_tests_verbose -gt 1 ]; then
         tests:debug "evaluation stderr:"
-        _tests_pipe _tests_indent 'stderr' < $_tests_run_stderr \
+        _tests_pipe tests:colorize fg 61 _tests_indent 'stderr' \
+            < $_tests_run_stderr \
             | _tests_check_empty
     fi
 }
@@ -1649,25 +1706,29 @@ Options:
     -d <dir>     Change directory to specified before running testcases.
                  [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
-                  -v     Simple debug:
-                          - only evaluated commands via tests:eval or
-                            tests:pipe will be printed
-                  -vv    Output debug:
-                          - stdout and stderr of evaluated commands will be
-                            printed.
-                          - also, sourced files will be printed.
-                  -vvv   Extended debug:
-                          - notes about namespace and sourced files will be
-                            expanded.
-                          - file contents put via tests:put will be printed.
-                  -vvvv  Extreme debug:
-                          - evaluated commands will be printed in form they
-                            will be evaluated.
-                          - stdin input for tests:eval and tests:put will be
-                            printed.
-                          - output of background tasks will be printed in
-                            realtime.
-                          - default debug level for \`-O\` mode.
+                  -v      Simple debug:
+                           - only evaluated commands via tests:eval or
+                             tests:pipe will be printed
+                  -vv     Output debug:
+                           - stdout and stderr of evaluated commands will be
+                             printed.
+                           - also, sourced files will be printed.
+                  -vvv    Extended debug:
+                           - notes about namespace and sourced files will be
+                             expanded.
+                           - file contents put via tests:put will be printed.
+                  -vvvv   Extreme debug:
+                           - evaluated commands will be printed in form they
+                             will be evaluated.
+                           - stdin input for tests:eval and tests:put will be
+                             printed.
+                           - default debug level for \`-O\` mode.
+                  -vvvvv  Insane debug:
+                           - output of background tasks will be printed in
+                             realtime (no proper use without highlighting).
+                  -vvvvvv Debug debug (oh, well).
+                           - produce messages for debuggin library for itself.
+
     -i           Pretty-prints documentation for public API in markdown format.
 EOF
 }

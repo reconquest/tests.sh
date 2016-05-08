@@ -24,6 +24,6 @@ EOF
 
 sed -ne '/no diff/,+9 { /@@/,$ { s/(diff) //; p } }' \
         $(tests:get-stderr-file) \
-    | put actual.diff
+    | tests:remove-colors | put actual.diff
 
 assert-no-diff actual.diff expected.diff "-w"
