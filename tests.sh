@@ -242,6 +242,17 @@ tests:get-stderr-file() {
     echo $_tests_run_stderr
 }
 
+# @description Returns file containing exitcode of last command.
+#
+# @example
+#   tests:eval exit 220
+#   cat $(tests:get-exitcode) # will echo 220
+#
+# @stdout Filename containing exitcode.
+tests:get-exitcode-file() {
+    echo $_tests_run_exitcode
+}
+
 # @description Same as 'tests:assert-diff', but ignore changes whose lines are
 # all blank.
 #
