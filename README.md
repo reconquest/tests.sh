@@ -1,6 +1,4 @@
-[![Build Status](https://travis-ci.org/reconquest/tests.sh.svg?branch=master)](https://travis-ci.org/reconquest/tests.sh)
-
-tests.sh
+tests.sh [![Build Status](https://travis-ci.org/reconquest/tests.sh.svg?branch=master)](https://travis-ci.org/reconquest/tests.sh)
 ========
 
 ![tests-sh](https://cloud.githubusercontent.com/assets/674812/14815361/c029d328-0bcc-11e6-91b6-4f27c872d060.gif)
