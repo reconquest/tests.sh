@@ -1,5 +1,46 @@
-## tests:import-namespace()
 
+* [tests:import-namespace()](#testsimportnamespace)
+* [tests:get-tmp-dir()](#testsgettmpdir)
+* [tests:assert-equals()](#testsassertequals)
+* [tests:assert-stdout()](#testsassertstdout)
+* [tests:assert-stderr()](#testsassertstderr)
+* [tests:match-re()](#testsmatchre)
+* [tests:assert-re()](#testsassertre)
+* [tests:assert-no-diff()](#testsassertnodiff)
+* [tests:get-stdout-file()](#testsgetstdoutfile)
+* [tests:get-stderr-file()](#testsgetstderrfile)
+* [tests:assert-no-diff-blank()](#testsassertnodiffblank)
+* [tests:assert-test()](#testsasserttest)
+* [tests:put-string()](#testsputstring)
+* [tests:put()](#testsput)
+* [tests:assert-stdout-re()](#testsassertstdoutre)
+* [tests:assert-stderr-re()](#testsassertstderrre)
+* [tests:assert-success()](#testsassertsuccess)
+* [tests:assert-fail()](#testsassertfail)
+* [tests:assert-exitcode()](#testsassertexitcode)
+* [tests:not()](#testsnot)
+* [tests:describe()](#testsdescribe)
+* [tests:debug()](#testsdebug)
+* [tests:cd()](#testscd)
+* [tests:eval()](#testseval)
+* [tests:runtime()](#testsruntime)
+* [tests:pipe()](#testspipe)
+* [tests:ensure()](#testsensure)
+* [tests:make-tmp-dir()](#testsmaketmpdir)
+* [tests:cd-tmp-dir()](#testscdtmpdir)
+* [tests:run-background()](#testsrunbackground)
+* [tests:get-background-pid()](#testsgetbackgroundpid)
+* [tests:get-background-stdout()](#testsgetbackgroundstdout)
+* [tests:background-stderr()](#testsbackgroundstderr)
+* [tests:stop-background()](#testsstopbackground)
+* [tests:wait-file-changes()](#testswaitfilechanges)
+* [tests:set-verbose()](#testssetverbose)
+* [tests:clone()](#testsclone)
+* [tests:involve()](#testsinvolve)
+* [tests:require()](#testsrequire)
+
+
+## tests:import-namespace()
 
 Make all functions from tests.sh available without 'tests:'
 prefix. Prefix can be also user defined, like 't:'.
@@ -9,7 +50,6 @@ prefix. Prefix can be also user defined, like 't:'.
 * **$1** (string): Custom prefix for namespace functions.
 
 ## tests:get-tmp-dir()
-
 
 Returns temporary directory for current test session.
 
@@ -27,7 +67,6 @@ ls $(tests:get-tmp-dir)
 
 ## tests:assert-equals()
 
-
 Asserts, that first string arg is equals to second.
 
 #### Example
@@ -42,7 +81,6 @@ tests:assert-equals 1 2 # fails
 * **$2** (string): Actual value.
 
 ## tests:assert-stdout()
-
 
 Asserts, that last evaluated command's stdout contains given
 string.
@@ -60,7 +98,6 @@ tests:assert-stdout 123
 
 ## tests:assert-stderr()
 
-
 Asserts, that last evaluated command's stderr contains given
 string.
 
@@ -76,7 +113,6 @@ tests:assert-stderr 123
 * **$1** (string): Expected stderr.
 
 ## tests:match-re()
-
 
 Compares, that last evaluated command output (stdout, stderr) or
 file contents matches regexp.
@@ -98,7 +134,6 @@ echo $? # 1
 
 ## tests:assert-re()
 
-
 Same as 'tests:match-re', but abort testing if comparison
 failed.
 
@@ -115,7 +150,6 @@ tests:assert-re stdout a.b # test fails there
 * [tests:match-re](#tests:match-re)
 
 ## tests:assert-no-diff()
-
 
 Asserts, that there are no diff on the last command output
 (stderr or stdout), or on string or on specified file with specified string
@@ -137,7 +171,6 @@ tests:assert-no-diff stdout "$(echo -e '1\n3')" # test will fail
 
 ## tests:get-stdout-file()
 
-
 Returns file containing stdout of last command.
 
 #### Example
@@ -153,7 +186,6 @@ cat $(tests:get-stdout-file) # will echo 123
 
 ## tests:get-stderr-file()
 
-
 Returns file containing stderr of last command.
 
 #### Example
@@ -168,7 +200,6 @@ cat $(tests:get-stderr) # will echo 123
 * Filename containing stderr.
 
 ## tests:assert-no-diff-blank()
-
 
 Same as 'tests:assert-diff', but ignore changes whose lines are
 all blank.
@@ -187,7 +218,6 @@ tests:assert-no-diff-blank stdout "$(echo -e '1\n\n2')" # test will pass
 
 ## tests:assert-test()
 
-
 Same as shell 'test' function, but asserts, that exit code is
 zero.
 
@@ -204,7 +234,6 @@ tests:assert-test 1 -eq 2 # test will fail
 
 ## tests:put-string()
 
-
 Put specified contents into temporary file with given name.
 
 #### Example
@@ -219,7 +248,6 @@ tests:put-string xxx "lala"
 * **$2** (string): Contents to put.
 
 ## tests:put()
-
 
 Put stdin into temporary file with given name.
 
@@ -239,7 +267,6 @@ EOF
 
 ## tests:assert-stdout-re()
 
-
 Asserts that stdout of last evaluated command matches given
 regexp.
 
@@ -254,7 +281,6 @@ tests:eval echo 123
 * **$1** (regexp): Regexp, same as in grep.
 
 ## tests:assert-stderr-re()
-
 
 Asserts as 'tests:assert-stdout-re', but stderr used instead
 of stdout.
@@ -271,7 +297,6 @@ tests:eval echo 123 '1>&2' # note quotes
 
 ## tests:assert-success()
 
-
 Asserts that last evaluated command exit status is zero.
 
 #### Example
@@ -284,7 +309,6 @@ tests:assert-success
 _Function has no arguments._
 
 ## tests:assert-fail()
-
 
 Asserts that last evaluated command exit status is not zero.
 Basically, alias for `test:not tests:assert-success`.
@@ -299,7 +323,6 @@ tests:assert-fail
 _Function has no arguments._
 
 ## tests:assert-exitcode()
-
 
 Asserts that exit code of last evaluated command equals to
 specified value.
@@ -317,7 +340,6 @@ tests:assert-exitcode 1
 
 ## tests:not()
 
-
 Negates passed assertion.
 
 #### Example
@@ -334,7 +356,6 @@ tests:not tests:assert-success
 
 ## tests:describe()
 
-
 Same as tests:debug(), but colorize output
 for better vizibility.
 
@@ -343,7 +364,6 @@ for better vizibility.
 * **...** (any): String to output.
 
 ## tests:debug()
-
 
 Print specified string in the debug log.
 
@@ -359,7 +379,6 @@ tests:debug "hello from debug" # will shown only in verbose mode
 
 ## tests:cd()
 
-
 Changes working directory to specified directory.
 
 ### Arguments
@@ -367,7 +386,6 @@ Changes working directory to specified directory.
 * **$1** (directory): Directory to change to.
 
 ## tests:eval()
-
 
 Evaluates specified string via shell 'eval'.
 
@@ -427,7 +445,6 @@ tests:eval echo 567 1\>\&2' # same
 
 ## tests:runtime()
 
-
 Same, as `tests:pipe`, but produce unbuffered result.
 
 #### Example
@@ -445,7 +462,6 @@ tests:runtime 'echo 1; sleep 10; echo 2'  # see 1 immediately
 * [tests:eval](#tests:eval)
 
 ## tests:pipe()
-
 
 Same, as `tests:eval`, but return stdout and stderr
 as expected.
@@ -467,7 +483,6 @@ tests:assert-equals $lines 1
 
 ## tests:ensure()
 
-
 Eval specified command and assert, that it has zero exitcode.
 
 #### Example
@@ -483,7 +498,6 @@ tests:esnure false # will fail
 
 ## tests:make-tmp-dir()
 
-
 Creates temporary directory.
 
 ### Arguments
@@ -491,7 +505,6 @@ Creates temporary directory.
 * **...** (any): Same as for mkdir command.
 
 ## tests:cd-tmp-dir()
-
 
 Changes working directory to the specified temporary directory,
 previously created by 'tests:mkdir'.
@@ -501,7 +514,6 @@ previously created by 'tests:mkdir'.
 * **$1** (string): Directory name.
 
 ## tests:run-background()
-
 
 Runs any command in background, this is very useful if you test
 some running service.
@@ -522,7 +534,6 @@ be printed.
 
 ## tests:get-background-pid()
 
-
 Returns pid of specified background process.
 
 ### Arguments
@@ -534,7 +545,6 @@ Returns pid of specified background process.
 * Pid of background process.
 
 ## tests:get-background-stdout()
-
 
 Returns stdout of specified background process.
 
@@ -548,7 +558,6 @@ Returns stdout of specified background process.
 
 ## tests:background-stderr()
 
-
 Returns stderr of specified background process.
 
 ### Arguments
@@ -561,7 +570,6 @@ Returns stderr of specified background process.
 
 ## tests:stop-background()
 
-
 Stops background process with 'kill -9'.
 
 ### Arguments
@@ -569,7 +577,6 @@ Stops background process with 'kill -9'.
 * **$1** (string): Process ID, returned from 'tests:run-background'.
 
 ## tests:wait-file-changes()
-
 
 Waits, until specified file will be changed or timeout passed
 after executing specified command.
@@ -583,7 +590,6 @@ after executing specified command.
 
 ## tests:set-verbose()
 
-
 Sets verbosity of testcase output.
 
 ### Arguments
@@ -591,7 +597,6 @@ Sets verbosity of testcase output.
 * **$1** (int): Verbosity.
 
 ## tests:clone()
-
 
 Copy specified file or directory from the testcases
 dir to the temporary test directory.
@@ -602,7 +607,6 @@ dir to the temporary test directory.
 
 ## tests:involve()
 
-
 Copy specified file from testcases to the temporary test
 directory and then source it.
 
@@ -612,7 +616,6 @@ directory and then source it.
 * **$2** (filename): Destination under test dir (not required).
 
 ## tests:require()
-
 
 Source file with debug.
 
