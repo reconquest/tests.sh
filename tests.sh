@@ -1526,165 +1526,6 @@ _tests_eval_and_capture_output() {
     )
 }
 
-_tests_print_docs() {
-    parser='# start of awk code {{{
-
-    BEGIN {
-        if (! style) {
-            style = "github"
-        }
-
-        styles["github", "h1", "from"] = ".*"
-        styles["github", "h1", "to"] = "## &"
-
-        styles["github", "h2", "from"] = ".*"
-        styles["github", "h2", "to"] = "### &"
-
-        styles["github", "h3", "from"] = ".*"
-        styles["github", "h3", "to"] = "#### &"
-
-        styles["github", "code", "from"] = ".*"
-        styles["github", "code", "to"] = "```&"
-
-        styles["github", "/code", "to"] = "```"
-
-        styles["github", "argN", "from"] = "^(\\$[0-9]) (\\S+)"
-        styles["github", "argN", "to"] = "**\\1** (\\2):"
-
-        styles["github", "arg@", "from"] = "^\\$@ (\\S+)"
-        styles["github", "arg@", "to"] = "**...** (\\1):"
-
-        styles["github", "li", "from"] = ".*"
-        styles["github", "li", "to"] = "* &"
-
-        styles["github", "i", "from"] = ".*"
-        styles["github", "i", "to"] = "_&_"
-
-        styles["github", "anchor", "from"] = ".*"
-        styles["github", "anchor", "to"] = "[&](#&)"
-
-        styles["github", "exitcode", "from"] = "([0-9]) (.*)"
-        styles["github", "exitcode", "to"] = "**\\1**: \\2"
-    }
-
-    function render(type, text) {
-        return gensub( \
-            styles[style, type, "from"],
-            styles[style, type, "to"],
-            "g",
-            text \
-        )
-    }
-
-    /^# @description/ {
-        in_description = 1
-        in_example = 0
-
-        has_example = 0
-        has_args = 0
-        has_exitcode = 0
-        has_stdout = 0
-
-        docblock = ""
-    }
-
-    in_description {
-        if (/^[^#]|^# @[^d]/) {
-            in_description = 0
-        } else {
-            sub(/^# @description /, "")
-            sub(/^# /, "")
-            sub(/^#$/, "")
-
-            if ($0) {
-                $0 = $0 "\n"
-            }
-
-            docblock = docblock $0
-        }
-    }
-
-    in_example {
-        if (! /^#[ ]{3}/) {
-            in_example = 0
-
-            docblock = docblock "\n" render("/code") "\n"
-        } else {
-            sub(/^#[ ]{3}/, "")
-
-            docblock = docblock "\n" $0
-        }
-    }
-
-    /^# @example/ {
-        in_example = 1
-
-        docblock = docblock "\n" render("h3", "Example")
-        docblock = docblock "\n\n" render("code", "bash")
-    }
-
-    /^# @arg/ {
-        if (!has_args) {
-            has_args = 1
-
-            docblock = docblock "\n" render("h2", "Arguments") "\n\n"
-        }
-
-        sub(/^# @arg /, "")
-
-        $0 = render("argN", $0)
-        $0 = render("arg@", $0)
-
-        docblock = docblock render("li", $0) "\n"
-    }
-
-    /^# @noargs/ {
-        docblock = docblock "\n" render("i", "Function has no arguments.") "\n"
-    }
-
-    /^# @exitcode/ {
-        if (!has_exitcode) {
-            has_exitcode = 1
-
-            docblock = docblock "\n" render("h2", "Exit codes") "\n\n"
-        }
-
-        sub(/^# @exitcode /, "")
-
-        $0 = render("exitcode", $0)
-
-        docblock = docblock render("li", $0) "\n"
-    }
-
-    /^# @see/ {
-        sub(/# @see /, "")
-
-        $0 = render("anchor", $0)
-        $0 = render("li", $0)
-
-        docblock = docblock "\n" render("h3", "See also") "\n\n" $0 "\n"
-    }
-
-    /^# @stdout/ {
-        has_stdout = 1
-
-        sub(/^# @stdout /, "")
-
-        docblock = docblock "\n" render("h2", "Output on stdout")
-        docblock = docblock "\n\n" render("li", $0) "\n"
-    }
-
-    /^tests:[a-zA-Z0-9_-]+\(\)/ && docblock != "" {
-        print render("h1", $1) "\n\n" docblock
-
-        docblock = ""
-    }
-
-    # }}} end of awk code'
-
-    awk "$parser" "$(basename $0)"
-}
-
 
 _tests_show_usage() {
     cat <<EOF
@@ -1731,8 +1572,6 @@ Options:
                              realtime (no proper use without highlighting).
                   -vvvvvv Debug debug (oh, well).
                            - produce messages for debuggin library for itself.
-
-    -i           Pretty-prints documentation for public API in markdown format.
 EOF
 }
 
@@ -1800,18 +1639,13 @@ tests:main() {
 
     OPTIND=
 
-    while getopts ":his:d:va" arg "${@}"; do
+    while getopts ":hs:d:va" arg "${@}"; do
         case $arg in
             d)
                 testcases_dir="$OPTARG"
                 ;;
             v)
                 _tests_verbose=$(($_tests_verbose+1))
-                ;;
-            i)
-                _tests_print_docs
-                exit $?
-                return $?
                 ;;
             h)
                 _tests_show_usage
@@ -1831,7 +1665,7 @@ tests:main() {
 
     OPTIND=
 
-    while getopts ":his:d:vaAO" arg "${@}"; do
+    while getopts ":hs:d:vaAO" arg "${@}"; do
         case $arg in
             A)
                 _tests_run_all \
