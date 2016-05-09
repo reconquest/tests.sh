@@ -8,6 +8,10 @@ tests.sh — simple test library for testing commands.
 tests.sh expected to find files named `*.test.sh` in the directory, provided by
 `-d` flag, and they are treated as testcases.
 
+# Reference
+
+See reference at [REFERENCE.md](REFERENCE.md).
+
 # Synopsis
 
 ```
@@ -57,7 +61,3 @@ Options:
 
 Local set up script should be specified via `-s` flag. `local.setup.sh`. It
 will be sources every time before each testcase.
-
-# Reference
-
-See reference at [REFERENCE.md](REFERENCE.md).
