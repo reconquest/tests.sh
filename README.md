@@ -24,7 +24,6 @@ Usage:
     tests.sh -h
     tests.sh [-v] [-d <dir>] [-s <path>] -A [-a]
     tests.sh [-v] [-d <dir>] [-s <path>] -O [<name>]
-    tests.sh -i
 
 Options:
     -h | --help  Show this help.
@@ -36,7 +35,28 @@ Options:
     -d <dir>     Change directory to specified before running testcases.
                  [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
-    -i           Pretty-prints documentation for public API in markdown format.
+                  -v      Simple debug:
+                           - only evaluated commands via tests:eval or
+                             tests:pipe will be printed
+                  -vv     Output debug:
+                           - stdout and stderr of evaluated commands will be
+                             printed.
+                           - also, sourced files will be printed.
+                  -vvv    Extended debug:
+                           - notes about namespace and sourced files will be
+                             expanded.
+                           - file contents put via tests:put will be printed.
+                  -vvvv   Extreme debug:
+                           - evaluated commands will be printed in form they
+                             will be evaluated.
+                           - stdin input for tests:eval and tests:put will be
+                             printed.
+                           - default debug level for `-O` mode.
+                  -vvvvv  Insane debug:
+                           - output of background tasks will be printed in
+                             realtime (no proper use without highlighting).
+                  -vvvvvv Debug debug (oh, well).
+                           - produce messages for debuggin library for itself.
 ```
 
 ## Usage example
