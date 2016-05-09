@@ -810,12 +810,12 @@ tests:clone() {
     local dest="$_tests_dir/$last_arg"
 
     if [ $_tests_verbose -gt 2 ]; then
-        tests:debug "\$ cp ${args[@]} $dest"
+        tests:debug "\$ cp -r ${args[@]} $dest"
     fi
 
     local stderr
-    if ! stderr=$(/bin/cp "${args[@]}" "$dest" 2>&1); then
-        tests:debug "error copying: cp ${args[@]} $dest:"
+    if ! stderr=$(/bin/cp -r "${args[@]}" "$dest" 2>&1); then
+        tests:debug "error copying: cp -r ${args[@]} $dest:"
         _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
     fi
