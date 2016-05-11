@@ -1580,65 +1580,66 @@ EOF
 }
 
 
+{
+    # Internal global state {{{
+
+    # Current test session.
+    _tests_dir=""
+
+    _tests_dir_root=""
+
+    # Verbosity level.
+    _tests_verbose=0
+
+    # Assertions counter.
+    _tests_asserts=0
+
+    # File with last stdout.
+    _tests_run_stdout=""
+
+    # File with last stderr.
+    _tests_run_stderr=""
+
+    # File with stderr and stout from eval
+    _tests_run_output=""
+
+    _tests_run_id=""
+
+    _tests_run_cmd=""
+
+    _tests_run_clean=""
+
+    # File with last exitcode.
+    _tests_run_exitcode=""
+
+    _tests_run_pidfile=""
+
+    _tests_run_namespace=""
+
+    # Current working directory for test suite.
+    _tests_base_dir=""
+
+    # Operation used in assertions (= or !=)
+    _tests_assert_operation="="
+
+    # Last used assert operation.
+    _tests_last_assert_operation="="
+
+    _tests_debug_fd="304"
+
+    _tests_bg_channels=""
+
+    _tests_debug_prefix=""
+
+    _tests_buffering=""
+
+    _tests_base_dir=$(pwd)
+
+    # }}}
+}
+
+
 tests:main() {
-    {
-        # Internal global state {{{
-
-        # Current test session.
-        local _tests_dir=""
-
-        local _tests_dir_root=""
-
-        # Verbosity level.
-        local _tests_verbose=${_tests_verbose:-0}
-
-        # Assertions counter.
-        local _tests_asserts=0
-
-        # File with last stdout.
-        local _tests_run_stdout=""
-
-        # File with last stderr.
-        local _tests_run_stderr=""
-
-        # File with stderr and stout from eval
-        local _tests_run_output=""
-
-        local _tests_run_id=""
-
-        local _tests_run_cmd=""
-
-        local _tests_run_clean=""
-
-        # File with last exitcode.
-        local _tests_run_exitcode=""
-
-        local _tests_run_pidfile=""
-
-        local _tests_run_namespace=""
-
-        # Current working directory for test suite.
-        local _tests_base_dir=""
-
-        # Operation used in assertions (= or !=)
-        local _tests_assert_operation="="
-
-        # Last used assert operation.
-        local _tests_last_assert_operation="="
-
-        local _tests_debug_fd="304"
-
-        local _tests_bg_channels=""
-
-        local _tests_debug_prefix=""
-
-        local _tests_buffering=""
-
-        local _tests_base_dir=$(pwd)
-
-        # }}}
-    }
-
     local testcases_dir="."
     local testcases_setup=""
     local see_subdirs=false
