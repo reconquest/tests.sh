@@ -2,6 +2,9 @@
 
 set -euo pipefail
 
+_base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+source $_base_dir/vendor/github.com/reconquest/coproc.v5ff21c4/coproc.bash
+
 # Public API Functions {{{
 
 # @description Make all functions from tests.sh available without 'tests:'
@@ -38,7 +41,7 @@ tests:get-tmp-dir() {
         _tests_interrupt
     fi
 
-    echo "$_tests_dir"
+    echo "$_tests_dir/root"
 }
 
 # @description Asserts, that first string arg is equals to second.
@@ -323,7 +326,7 @@ tests:put-string() {
 #
 # @arg $1 filename Temporary file name.
 tests:put() {
-    local file="$_tests_dir/$1"
+    local file="$_tests_dir_root/$1"
 
     local stderr
     if ! stderr=$(cat 2>&1 > $file); then
@@ -457,7 +460,7 @@ tests:debug() {
     fi
 
     if [ "$_tests_dir" ]; then
-        echo -e "# ${prefix# }$@"
+        echo -e "${prefix}# $@"
     else
         echo -e "### $@"
     fi >&${output}
@@ -584,13 +587,13 @@ tests:make-tmp-dir() {
     # prepend to any non-flag argument $_tests_dir prefix
 
     if [ $_tests_verbose -gt 2 ]; then
-        tests:debug "making directories in $_tests_dir: mkdir ${@}"
+        tests:debug "making directories in $_tests_dir_root: mkdir ${@}"
     fi
 
     local stderr
     if ! stderr=$(
         /bin/mkdir \
-            $(sed -re "s#(^|\\s)([^-])#\\1$_tests_dir/\\2#g" <<< "${@}")); then
+            $(sed -re "s#(^|\\s)([^-])#\\1$_tests_dir_root/\\2#g" <<< "${@}")); then
         tests:debug "error making directories ${@}:"
         _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
@@ -613,37 +616,71 @@ tests:cd-tmp-dir() {
 # be printed.
 #
 # @arg $1 variable Name of variable to store BG process ID.
-# @arg $2 -- -- Delimiter, is REQUIRED.
 # @arg $@ string Command to start.
-#
-# @stdout Unique identifier of running backout process.
 tests:run-background() {
-    local identifier_var=$1
-    shift 2 # for --
+    local _id="$1"
+    shift
 
-    local cmd=("${@}")
+    {
+        local old_prefix=$_tests_debug_prefix
+        _tests_debug_prefix="[BG] <$BASHPID>  "
 
-    _tests_prepare_eval_namespace bg
+        coproc:run "$_id" "${@}"
 
-    local identifier=$(cat $_tests_run_id)
-    local run_mode="&"
-    if [ $_tests_verbose -gt 6 ]; then
-        tests:debug "{DEBUG} [BG] #$identifier: TASK WILL RUN IN FOREGROUND"
-        run_mode=""
-    fi
+        _tests_debug_prefix=$old_prefix
+    }
 
-    tests:debug "{START} [BG] #$identifier: ! at '$_tests_run_namespace'"
-    tests:debug "{START} [BG] #$identifier: evaluating command:"
+    eval local id=\$$_id
 
-    _tests_pipe tests:colorize fg 5 _tests_indent '$' <<< "${cmd[@]}"
+    coproc:get-pid "$id" pid
+    command mkdir $_tests_dir/.bg/$pid
+    ln -s "$id" $_tests_dir/.bg/$pid/coproc
 
-    builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
 
-    builtin eval $identifier_var=\$identifier
+    tests:debug "! running coprocess with pid <$pid>:"
+    _tests_indent "coproc" <<< "${@}"
 
-    while [ "$(cat $_tests_run_pidfile)" = "" ]; do
-        :
-    done
+    local stdout
+    local stderr
+
+    coproc:get-stdout-fd "$id" stdout
+    coproc:get-stderr-fd "$id" stderr
+
+    _tests_run_bg_reader $stdout $_tests_dir/.bg/$pid/stdout "<$pid> stdout"
+    _tests_run_bg_reader $stderr $_tests_dir/.bg/$pid/stderr "<$pid> stderr"
+
+    #local cmd=("${@}")
+
+    #_tests_prepare_eval_namespace bg
+
+    #local identifier=$(cat $_tests_run_id)
+    #local run_mode="&"
+    #if [ $_tests_verbose -gt 6 ]; then
+    #    tests:debug "{DEBUG} [BG] #$identifier: TASK WILL RUN IN FOREGROUND"
+    #    run_mode=""
+    #fi
+
+    #tests:debug "{START} [BG] #$identifier: ! at '$_tests_run_namespace'"
+    #tests:debug "{START} [BG] #$identifier: evaluating command:"
+
+    #_tests_pipe tests:colorize fg 5 _tests_indent '$' <<< "${cmd[@]}"
+
+    #builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
+
+    #builtin eval $identifier_var=\$identifier
+
+    #while [ "$(cat $_tests_run_pidfile)" = "" ]; do
+    #    :
+    #done
+}
+
+_tests_run_bg_reader() {
+    local input_fd=$1
+    local output=$2
+    local prefix=$3
+
+    #_tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
+    ( cat <&$input_fd | tee $output | _tests_indent "$prefix" ) &
 }
 
 # @description Returns pid of specified background process.
@@ -677,40 +714,46 @@ tests:background-stderr() {
 #
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 tests:stop-background() {
-    local id="$1"
-    local pid=$(cat $_tests_dir/.ns/bg/$id/pid)
-    if [ -z "$pid" ]; then
-        tests:debug "{STOP} [BG] #$id: PID UNAVAILABLE"
-        return 1
-    fi
+    local bg_proc="$1"
 
-    tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
+    tests:debug "! stopping coprocess with pid <${bg_proc##*/}>"
+    coproc:stop $(readlink -f "$bg_proc/coproc")
 
-    local main_exe="$(readlink -f /proc/$pid/exe)"
+    rm -r $bg_proc
 
-    while [ ! -e $_tests_dir/.ns/bg/$id/done ]; do
-        local -a pids=()
-        if ! pids=($(_tests_get_pids_tree $pid)); then
-            break
-        fi
+    #local pid=$(cat $_tests_dir/.ns/bg/$id/pid)
+    #if [ -z "$pid" ]; then
+    #    tests:debug "{STOP} [BG] #$id: PID UNAVAILABLE"
+    #    return 1
+    #fi
+
+    #tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
+
+    #local main_exe="$(readlink -f /proc/$pid/exe)"
+
+    #while [ ! -e $_tests_dir/.ns/bg/$id/done ]; do
+    #    local -a pids=()
+    #    if ! pids=($(_tests_get_pids_tree $pid)); then
+    #        break
+    #    fi
 
 
-        if [ ${#pids[@]} -lt 2 ]; then
-            continue
-        fi
+    #    if [ ${#pids[@]} -lt 2 ]; then
+    #        continue
+    #    fi
 
-        for task_pid in "${pids[@]}"; do
-            local exe="$(readlink -f /proc/$task_pid/exe)"
-            if [ "$exe" = "$main_exe" ]; then
-                continue
-            fi
+    #    for task_pid in "${pids[@]}"; do
+    #        local exe="$(readlink -f /proc/$task_pid/exe)"
+    #        if [ "$exe" = "$main_exe" ]; then
+    #            continue
+    #        fi
 
-            _kill_task "$task_pid" &
-            wait $!
-        done
-    done
+    #        _kill_task "$task_pid" &
+    #        wait $!
+    #    done
+    #done
 
-    return 0
+    #return 0
 }
 
 _kill_task() {
@@ -818,7 +861,7 @@ tests:clone() {
         shift
     done
 
-    local dest="$_tests_dir/$last_arg"
+    local dest="$_tests_dir_root/$last_arg"
 
     if [ $_tests_verbose -gt 2 ]; then
         tests:debug "\$ cp -r ${args[@]} $dest"
@@ -870,7 +913,9 @@ tests:require() {
 
     trap "tests:debug '{ERROR} in $file'" EXIT
 
-    builtin source "$file"
+    if ! builtin source "$file"; then
+        return 1
+    fi
 
     trap - EXIT
 
@@ -1174,9 +1219,9 @@ _tests_run_raw() {
     local testcase_setup="$2"
 
     (
-        PATH="$_tests_dir/bin:$PATH"
+        PATH="$_tests_dir_root/bin:$PATH"
 
-        builtin cd $_tests_dir
+        builtin cd $_tests_dir_root
 
         if [ -n "$testcase_setup" ]; then
             if [ $_tests_verbose -gt 2 ]; then
@@ -1196,6 +1241,8 @@ _tests_run_raw() {
         trap _tests_wait_bg_tasks EXIT
         builtin source "$testcase_file"
 
+        _tests_wait_bg_tasks
+
         exit $?
     ) 2>&1 | _tests_indent
 }
@@ -1209,8 +1256,6 @@ _tests_run_bg_task() {
     local to_evaluate=()
 
     builtin eval to_evaluate=\"\${$cmd_var[@]}\"
-
-    _tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
 
     exec {_tests_debug_fd}>$_tests_bg_channels/debug
 
@@ -1283,57 +1328,19 @@ _tests_rm_last() {
     rm -f $_tests_base_dir/.last-testcase
 }
 
-_tests_run_bg_reader() {
-    local prefix=${1:-}
-    local pipe=$2
-
-    (
-        while [ -e $_tests_bg_channels/.active ]; do
-            while read line; do
-                if [ $_tests_verbose -gt 4 ]; then
-                    _tests_pipe tests:debug "${prefix:+"($prefix) "}$line"
-                fi
-            done < $pipe
-        done | _tests_indent
-    ) &
-}
-
 _tests_init() {
     _tests_dir="$(mktemp -t -d tests.XXXX)"
 
-    /bin/mkdir $_tests_dir/bin
+    _tests_dir_root=$_tests_dir/root
 
-    _tests_bg_channels="$_tests_dir/.bg-channels/"
-
-    mkdir -p $_tests_bg_channels
-
-    mkfifo $_tests_bg_channels/stdout
-    mkfifo $_tests_bg_channels/stderr
-    mkfifo $_tests_bg_channels/debug
-
-    touch $_tests_bg_channels/.active
-
-    _tests_run_bg_reader "bg stderr" $_tests_bg_channels/stderr
-    _tests_run_bg_reader "bg stdout" $_tests_bg_channels/stdout
-    _tests_run_bg_reader "bg debug" $_tests_bg_channels/debug
+    command mkdir -p $_tests_dir_root
+    command mkdir -p $_tests_dir_root/bin
+    command mkdir -p $_tests_dir/.bg
 
     tests:debug "{BEGIN} TEST SESSION AT $_tests_dir"
 }
 
 _tests_cleanup() {
-    local fifo
-
-    rm $_tests_bg_channels/.active
-
-    exec {fifo}>$_tests_bg_channels/stdout
-    exec {fifo}<&-
-
-    exec {fifo}>$_tests_bg_channels/stderr
-    exec {fifo}<&-
-
-    exec {fifo}>$_tests_bg_channels/debug
-    exec {fifo}<&-
-
     rm -rf "$_tests_dir"
 
     _tests_dir=""
@@ -1342,35 +1349,13 @@ _tests_cleanup() {
 }
 
 _tests_wait_bg_tasks() {
-    for bg_dir in $_tests_dir/.ns/bg/*; do
-        if ! test -d $bg_dir; then
+    for bg_proc in $_tests_dir/.bg/*; do
+        if [ ! -d $bg_proc ]; then
             continue
         fi
 
-        local bg_id=$(cat $bg_dir/id)
-
-        tests:stop-background $bg_id
-
-        if [ -e "$_tests_dir/.failed" -o $_tests_verbose -gt 3 ]; then
-            local bg_cmd=$(echo $(xargs -0 -n1 < $bg_dir/cmd))
-            local bg_stdout=$bg_dir/stdout
-            local bg_stderr=$bg_dir/stderr
-
-            tests:debug "{STOP} [BG] #$bg_id: command was:"
-
-            _tests_indent '$' <<< "$bg_cmd"
-
-            tests:debug "{STOP} [BG] #$bg_id stdout:"
-            _tests_pipe _tests_indent 'stdout' < "$bg_stdout" \
-                | _tests_check_empty
-
-            tests:debug "{STOP} [BG] #$bg_id stderr:"
-            _tests_pipe _tests_indent 'stderr' < "$bg_stderr" \
-                | _tests_check_empty
-        fi
+        tests:stop-background "$bg_proc"
     done
-
-    return 0
 }
 
 _tests_interrupt() {
@@ -1593,6 +1578,8 @@ tests:main() {
 
         # Current test session.
         local _tests_dir=""
+
+        local _tests_dir_root=""
 
         # Verbosity level.
         local _tests_verbose=0

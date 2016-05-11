@@ -4,7 +4,7 @@ file=\$(tests:get-tmp-dir)/done
 tests:eval touch \$file
 
 run-bg() {
-    tests:run-background id -- "
+    tests:run-background id "
         tests:pipe echo \"pre sleep\"
         tests:eval touch \$file
         while sleep 10; do :; done
@@ -16,10 +16,4 @@ EOF
 
 tests:runtime tests.sh -d testcases -Avvvvv
 
-assert-stderr '(bg stdout) pre sleep'
-assert-stderr '(stdout) pre sleep'
-
-tests:runtime tests.sh -d testcases -Avvvv
-
-not assert-stderr '(bg stdout) pre sleep'
-assert-stderr '(stdout) pre sleep'
+assert-stderr-re '\(\<\d+\> stdout\) pre sleep'
