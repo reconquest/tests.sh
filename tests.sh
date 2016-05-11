@@ -3,7 +3,7 @@
 set -euo pipefail
 
 _base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-source $_base_dir/vendor/github.com/reconquest/coproc.v5ff21c4/coproc.bash
+source $_base_dir/vendor/github.com/reconquest/coproc.v41e642/coproc.bash
 
 # Public API Functions {{{
 
@@ -625,7 +625,7 @@ tests:run-background() {
         local old_prefix=$_tests_debug_prefix
         _tests_debug_prefix="[BG] <$BASHPID>  "
 
-        coproc:run "$_id" "${@}"
+        coproc:run-immediately "$_id" "${@}"
 
         _tests_debug_prefix=$old_prefix
     }
@@ -718,68 +718,6 @@ tests:stop-background() {
 
     tests:debug "! stopping coprocess with pid <${bg_proc##*/}>"
     coproc:stop $(readlink -f "$bg_proc/coproc")
-
-    rm -r $bg_proc
-
-    #local pid=$(cat $_tests_dir/.ns/bg/$id/pid)
-    #if [ -z "$pid" ]; then
-    #    tests:debug "{STOP} [BG] #$id: PID UNAVAILABLE"
-    #    return 1
-    #fi
-
-    #tests:debug "{STOP} [BG] #$id pid:<$pid>: stopping"
-
-    #local main_exe="$(readlink -f /proc/$pid/exe)"
-
-    #while [ ! -e $_tests_dir/.ns/bg/$id/done ]; do
-    #    local -a pids=()
-    #    if ! pids=($(_tests_get_pids_tree $pid)); then
-    #        break
-    #    fi
-
-
-    #    if [ ${#pids[@]} -lt 2 ]; then
-    #        continue
-    #    fi
-
-    #    for task_pid in "${pids[@]}"; do
-    #        local exe="$(readlink -f /proc/$task_pid/exe)"
-    #        if [ "$exe" = "$main_exe" ]; then
-    #            continue
-    #        fi
-
-    #        _kill_task "$task_pid" &
-    #        wait $!
-    #    done
-    #done
-
-    #return 0
-}
-
-_kill_task() {
-    local pid="$1"
-
-    local kill_command=kill
-    if { command $kill_command "$pid" || true; } 2>&1 \
-        | grep -q 'not permitted'
-    then
-        tests:debug "! killing with sudo"
-        kill_command="sudo kill"
-    fi
-
-    tests:debug "$kill_command $pid"
-
-    command $kill_command "$1" 2>/dev/null || true
-
-    (
-        sleep 0.5
-        if command $kill_command "$1" -9 2>/dev/null; then
-            tests:debug fg 1 tests:debug "TERMINATED: $pid"
-        else
-            tests:debug "killed: $pid"
-        fi
-
-    ) &
 }
 
 # @description Waits, until specified file will be changed or timeout passed
@@ -1246,7 +1184,6 @@ _tests_run_raw() {
             fi
         fi
 
-        trap _tests_wait_bg_tasks EXIT
         builtin source "$testcase_file"
 
         _tests_wait_bg_tasks

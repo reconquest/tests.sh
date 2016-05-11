@@ -25,6 +25,16 @@ coproc:run() {
     _coproc_job "$self" "${@}"
 }
 
+coproc:run-immediately() {
+    local _id_var="$1"
+    local stdin
+
+    coproc:run "${@}"
+
+    eval coproc:get-stdin-fd \$$_id_var stdin
+    coproc:close-fd stdin
+}
+
 # @description Gets top-level PID of specified running coprocess.
 #
 # @arg $1 id Coprocesss ID.
@@ -121,26 +131,6 @@ coproc:get-stderr-only() {
     coproc:close-fd stdout
 }
 
-_coproc_send_stdin() {
-    local self=$1
-
-    local stdin
-
-    exec {stdin}>$self/stdin.pipe
-
-    if [ -s /dev/stdin ]; then
-        cat >&$stdin
-    else
-        cat /dev/null >&$stdin
-    fi
-
-    exec {stdin}<&-
-}
-
-#coproc:close-stdin() {
-
-#}
-
 # @description Closes specified FD, previously opened by
 # `coproc:get-stdout-fd()` or `coproc:get-stderr-fd()` functions.
 #
@@ -206,8 +196,6 @@ _coproc_job() {
         2>$self/stderr.pipe &
 
     printf "$!" >$self/pid
-
-    _coproc_send_stdin "$self"
 }
 
 _coproc_eval() {
@@ -237,14 +225,13 @@ _coproc_kill_children() {
     local children=(${@})
     local kill_output
 
-    if kill_output="$(command $kill_command "${children[@]}" 2>&1)"; then
-        if grep -qF "not permitted" <<< "$kill_output"; then
-            _coproc_kill_children "sudo kill" "${children[@]}"
-        else
-            _coproc_kill_watchdog "${children[@]}" &
+    kill_output="$(command $kill_command "${children[@]}" 2>&1)" || true
+    if grep -qF "not permitted" <<< "$kill_output"; then
+        _coproc_kill_children "sudo kill" "${children[@]}"
+    else
+        _coproc_kill_watchdog "${children[@]}" &
 
-            wait $!
-        fi
+        wait $!
     fi
 }
 
