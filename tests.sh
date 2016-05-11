@@ -837,6 +837,14 @@ tests:set-verbose() {
     _tests_verbose=$1
 }
 
+# @description Gets current verbosity level.
+#
+# @noargs
+# @stdout Current verbosity.
+tests:get-verbose() {
+    printf "%s" $_tests_verbose
+}
+
 # @description Copy specified file or directory from the testcases
 # dir to the temporary test directory.
 #
