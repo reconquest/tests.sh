@@ -1590,7 +1590,7 @@ tests:main() {
         local _tests_dir_root=""
 
         # Verbosity level.
-        local _tests_verbose=0
+        local _tests_verbose=${_tests_verbose:-0}
 
         # Assertions counter.
         local _tests_asserts=0
