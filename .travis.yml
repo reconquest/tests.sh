@@ -1,3 +1,6 @@
 language: bash
 sudo: required
 script: ./run_tests.sh
+before_install:
+    sudo apt-get -qq update
+    sudo apt-get install bash>=4.3
