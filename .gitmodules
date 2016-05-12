@@ -1,0 +1,3 @@
+[submodule "vendor/github.com/reconquest/shdoc"]
+	path = vendor/github.com/reconquest/shdoc
+	url = https://github.com/reconquest/shdoc
