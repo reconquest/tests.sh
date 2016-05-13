@@ -598,8 +598,8 @@ tests:value() {
 
     tests:ensure "${@}"
 
-    __value__=$(cat $(tests:get-stdout-file))
-    eval $__variable__=\$__value__
+    __value__="$(cat "$(tests:get-stdout-file)")"
+    eval $__variable__=\"\${__value__}\"
 
 }
 
