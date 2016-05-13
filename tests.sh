@@ -570,6 +570,8 @@ tests:runtime() {
 # @arg $@ string String to evaluate.
 # @see tests:eval
 tests:pipe() {
+    _tests_prepare_eval_namespace eval
+
     exec {stdout}>&1
     exec {stderr}>&2
 
