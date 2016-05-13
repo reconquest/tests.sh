@@ -1012,10 +1012,18 @@ _tests_quote_cmd() {
 
 _tests_get_testcases() {
     local directory="$1"
-    local mask="$2"
+    local recursive=$2
+
     (
-        shopt -s globstar nullglob
-        echo $directory/$mask
+        shopt -s globstar
+
+        builtin cd $directory
+
+        if $recursive; then
+            ls -t **/*.test.sh
+        else
+            ls -t *.test.sh
+        fi
     )
 }
 
@@ -1023,21 +1031,17 @@ _tests_get_testcases() {
 _tests_run_all() {
     local testcases_dir="$1"
     local testcase_setup="$2"
-    local see_subdirs=$3
+    local recursive=$3
 
-    local filemask="*.test.sh"
-    if $see_subdirs; then
-        filemask="**/*.test.sh"
-    fi
-
-    local testcases=($(_tests_get_testcases "$testcases_dir" "$filemask"))
+    local testcases=($(
+        _tests_get_testcases "$testcases_dir" $recursive
+    ))
     if [ "${#testcases[@]}" -eq 0 ]; then
         echo no testcases found.
 
         exit 1
         return 1
     fi
-
 
     local verbose=$_tests_verbose
     if [ $verbose -lt 1 ]; then
@@ -1066,7 +1070,7 @@ _tests_run_all() {
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$file" "$testcase_setup" \
+            if _tests_run_one "$testcases_dir/$file" "$testcase_setup" \
                     >$stdout 2>$stderr;
             then
                 result=0
@@ -1089,7 +1093,7 @@ _tests_run_all() {
             fi
         else
             local result
-            if _tests_run_one "$file" "$testcase_setup"; then
+            if _tests_run_one "$testcases_dir/$file" "$testcase_setup"; then
                 result=0
             else
                 result=$?
@@ -1604,7 +1608,7 @@ tests:main() {
 
     local testcases_dir="."
     local testcases_setup=""
-    local see_subdirs=false
+    local recursive=false
 
     OPTIND=
 
@@ -1622,7 +1626,7 @@ tests:main() {
                 return 1
                 ;;
             a)
-                see_subdirs=true
+                recursive=true
                 ;;
             s)
                 testcases_setup="$OPTARG"
@@ -1638,7 +1642,7 @@ tests:main() {
         case $arg in
             A)
                 _tests_run_all \
-                    "$testcases_dir" "$testcases_setup" $see_subdirs
+                    "$testcases_dir" "$testcases_setup" $recursive
 
                 exit $?
                 return $?
