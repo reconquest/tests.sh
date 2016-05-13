@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 _base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 source $_base_dir/vendor/github.com/reconquest/coproc.v41e642/coproc.bash
 
@@ -1363,6 +1361,10 @@ _tests_unbuffer() {
     stdbuf -o0 -i0 -e0 "${@}"
 }
 
+_tests_set_options() {
+    set -euo pipefail
+}
+
 _tests_eval_and_output_to_fd() {
     local stdout=$1
     local stderr=$2
@@ -1433,7 +1435,7 @@ _tests_eval_and_output_to_fd() {
 
 _tests_eval_and_capture_output() {
     (
-        set +euo pipefail
+        _tests_set_options
 
         case $_tests_verbose in
             0|1)
@@ -1577,6 +1579,8 @@ EOF
 
 
 tests:main() {
+    _tests_set_options
+
     local testcases_dir="."
     local testcases_setup=""
     local see_subdirs=false
