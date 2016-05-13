@@ -9,4 +9,4 @@ EOF
 
 ensure tests.sh -d testcases -A
 
-assert-stdout '1 tests (1 assertions) done successfully!'
+assert-stdout '1 tests (2 assertions) done successfully!'

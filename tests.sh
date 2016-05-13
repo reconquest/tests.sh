@@ -592,11 +592,14 @@ tests:pipe() {
 # @arg $@ string String to evaluate.
 # @see tests:eval
 tests:value() {
-    local _variable="$1"
+    local __variable__="$1"
+    local __value__=""
     shift
 
-    local _value=$(tests:pipe "${@}")
-    eval $_variable=\$_value
+    tests:ensure "${@}"
+
+    __value__=$(cat $(tests:get-stdout-file))
+    eval $__variable__=\$__value__
 
 }
 
