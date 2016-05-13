@@ -74,7 +74,7 @@ coproc:wait() {
     exec {stdout}<&-
     exec {stderr}<&-
 
-    return $(cat "$self/done")
+    return $(cat "$self/done" || coproc:get-killed-code)
 }
 
 # @description Gets stdout FD linked to stdout of running coprocess.
@@ -164,11 +164,14 @@ coproc:stop() {
         main_pid=$(cat $self/pid)
     done
 
-    while pstree -lp "$main_pid" | grep -oqP '\(\d+\)'; do
+    while pstree -lcp "$main_pid" | grep -oqP '\(\d+\)'; do
         for pid in $(_coproc_get_job_child_pids "$main_pid"); do
             _coproc_kill "pkill -P" "$pid"
             _coproc_kill "kill" "$pid"
         done
+
+        _coproc_kill "pkill -P" "$main_pid"
+        _coproc_kill "kill" "$main_pid"
     done
 
     _coproc_kill_watchdog "$wait_pid" &
@@ -208,6 +211,7 @@ _coproc_eval() {
         exit_code=$?
     fi
 
+    exec 0<&-
     exec 1<&-
     exec 2<&-
 
