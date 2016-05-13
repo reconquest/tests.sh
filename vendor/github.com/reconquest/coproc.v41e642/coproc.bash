@@ -61,7 +61,6 @@ coproc:wait() {
     local pid
     coproc:get-pid "$self" pid
 
-
     exec {stdin}<>$self/stdin.pipe
     exec {stdout}<>$self/stdout.pipe
     exec {stderr}<>$self/stderr.pipe
@@ -164,11 +163,17 @@ coproc:stop() {
         main_pid=$(cat $self/pid)
     done
 
-    while pstree -lcp "$main_pid" | grep -oqP '\(\d+\)'; do
+    while ps -p "$main_pid" >/dev/null 2>&1; do
+        while [ "$(ps -o s= -q "$main_pid")" != "T" ]; do
+            _coproc_kill "kill -STOP" "$pid"
+        done
+
         for pid in $(_coproc_get_job_child_pids "$main_pid"); do
             _coproc_kill "pkill -P" "$pid"
             _coproc_kill "kill" "$pid"
         done
+
+        _coproc_kill "kill -CONT" "$main_pid"
 
         _coproc_kill "pkill -P" "$main_pid"
         _coproc_kill "kill" "$main_pid"

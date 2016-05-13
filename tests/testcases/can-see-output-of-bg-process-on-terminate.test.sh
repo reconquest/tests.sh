@@ -7,7 +7,7 @@ run-bg() {
     tests:run-background id "
         tests:pipe echo \"pre sleep\"
         tests:eval touch \$file
-        while sleep 10; do :; done
+        watch -n1 : >/dev/null 2>/dev/null
     "
 }
 
