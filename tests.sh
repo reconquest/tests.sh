@@ -152,6 +152,11 @@ tests:assert-re() {
 
     tests:match-re "$target" "$regexp"
 
+    if [ ! -f "$_tests_run_exitcode" ]; then
+        tests:debug "(assert-re) BUG: _tests_run_exitcode is empty"
+        _tests_interrupt
+    fi
+
     local result=$(cat $_tests_run_exitcode)
 
     _tests_make_assertion $result 0 \
@@ -398,6 +403,11 @@ tests:assert-fail() {
 #
 # @arg $1 int Expected exit code.
 tests:assert-exitcode() {
+    if [ ! -f "$_tests_run_exitcode" ]; then
+        tests:debug "(assert-exitcode) BUG: _tests_run_exitcode is empty"
+        _tests_interrupt
+    fi
+
     local actual=$(cat $_tests_run_exitcode)
     local expected=$1
     shift
