@@ -164,7 +164,7 @@ coproc:stop() {
     done
 
     while ps -p "$main_pid" >/dev/null 2>&1; do
-        while [ "$(ps -o s= -q "$main_pid")" != "T" ]; do
+        while [ "$(ps -o s= -p "$main_pid")" != "T" ]; do
             _coproc_kill "kill -STOP" "$pid"
         done
 
