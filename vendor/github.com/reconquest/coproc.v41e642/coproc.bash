@@ -164,12 +164,14 @@ coproc:stop() {
         main_pid=$(cat $self/pid)
     done
 
-    while pstree -lp "$pid" | grep -oqP '\(\d+\)'; do
-        _coproc_kill "pkill -P" "$main_pid"
+    while pstree -lp "$main_pid" | grep -oqP '\(\d+\)'; do
+        for pid in $(_coproc_get_job_child_pids "$main_pid"); do
+            _coproc_kill "pkill -P" "$pid"
+            _coproc_kill "kill" "$pid"
+        done
     done
 
     _coproc_kill_watchdog "$wait_pid" &
-    wait $wait_pid
 }
 
 # @description Returns error code which will be returned by `coproc:wait()` if
@@ -219,13 +221,10 @@ _coproc_kill() {
     local kill_output
 
     kill_output="$(command $kill_command "$pid" 2>&1)" || true
-    printf 'XXXXXX coproc.bash:234: $kill_output: %q\n' $kill_output >&2 >>/tmp/debug
     if grep -qF "not permitted" <<< "$kill_output"; then
-        _coproc_kill "sudo "$kill_command "$pid"
+        _coproc_kill "sudo $kill_command" "$pid"
     else
         _coproc_kill_watchdog $kill_command "$pid" &
-
-        wait $!
     fi
 }
 
@@ -233,7 +232,7 @@ _coproc_kill_watchdog() {
     local kill_command=$1
     local pid=$1
 
-    sleep 0.1
+    sleep 0.5
     command $kill_command "$pid" -9 &>/dev/null || true
 }
 

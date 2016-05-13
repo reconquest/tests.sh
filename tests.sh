@@ -1185,7 +1185,6 @@ _tests_run_raw() {
         fi
 
         builtin source "$testcase_file"
-
         _tests_wait_bg_tasks
 
         exit $?
