@@ -163,10 +163,11 @@ coproc:stop() {
         main_pid=$(cat $self/pid)
     done
 
-    while ps -p "$main_pid" >/dev/null 2>&1; do
-        while [ "$(ps -o s= -p "$main_pid")" != "T" ]; do
+    while _coproc_is_task_exists "$main_pid"; do
+        if ! _coproc_is_task_suspended "$main_pid"; then
             _coproc_kill "kill -STOP" "$pid"
-        done
+            continue
+        fi
 
         for pid in $(_coproc_get_job_child_pids "$main_pid"); do
             _coproc_kill "pkill -P" "$pid"
@@ -243,6 +244,14 @@ _coproc_kill_watchdog() {
 
     sleep 0.5
     command $kill_command "$pid" -9 &>/dev/null || true
+}
+
+_coproc_is_task_exists() {
+    ps -p "$1" >/dev/null 2>&1
+}
+
+_coproc_is_task_suspended() {
+    [ "$(ps -o s= -p "$1")" = "T" ]
 }
 
 _coproc_get_job_child_pids() {
