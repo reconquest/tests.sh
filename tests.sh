@@ -1253,7 +1253,7 @@ _tests_new_id() {
 _tests_prepare_eval_namespace() {
     local namespace="$1"
 
-    if [ "$_tests_run_clean" ]; then
+    if [ -e "$_tests_run_clean" ]; then
         if [ "$(cat $_tests_run_clean 2>/dev/null)" = "1" ]; then
             #if [ "$namespace" = "${_tests_run_namespace##*/}" ]; then
                 return
@@ -1470,11 +1470,9 @@ _tests_eval_and_output_to_fd() {
 
 _tests_eval_and_capture_output() {
     (
-        _tests_set_options
-
         case $_tests_verbose in
             0|1)
-                _tests_raw_eval "${@}" \
+                (_tests_set_options; _tests_raw_eval "${@}") \
                     > $_tests_run_stdout \
                     2> $_tests_run_stderr
                 ;;
@@ -1486,7 +1484,7 @@ _tests_eval_and_capture_output() {
                 #
                 # `true` will exit no matter running sleep, and hello will
                 # be shown only after 1 second pass.
-                { _tests_raw_eval "${@}" \
+                { (_tests_set_options; _tests_raw_eval "${@}") \
                     | tee $_tests_run_stdout 1>&3; exit ${PIPESTATUS[0]}; } \
                     2> $_tests_run_stderr 3>&1
                 ;;
@@ -1496,7 +1494,7 @@ _tests_eval_and_capture_output() {
                 # of _tests_raw_eval.
                 #
                 # It's required, because -o pipefail is not set here.
-                { { _tests_raw_eval "${@}" \
+                { { (_tests_set_options; _tests_raw_eval "${@}") \
                     | tee $_tests_run_stdout 1>&3; exit ${PIPESTATUS[0]}; } 2>&1 \
                     | tee $_tests_run_stderr 1>&2; exit ${PIPESTATUS[0]}; } 3>&1
                 ;;
