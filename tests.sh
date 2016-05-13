@@ -163,8 +163,7 @@ tests:assert-re() {
         "regexp matches" \
         ">>> ${regexp:-<empty regexp>}" \
         "<<< contents of ${target}:\n\
-            $(_tests_pipe _tests_indent "$target" < $file \
-                | _tests_pipe _tests_check_empty)"
+            $(_tests_pipe _tests_indent "$target" < $file)"
 
     _tests_inc_asserts_count
 }
@@ -528,11 +527,15 @@ tests:cd() {
 # @see tests:pipe
 # @see tests:runtime
 tests:eval() {
+    local output
+
     _tests_prepare_eval_namespace eval
 
     exec {output}>$_tests_run_output
 
     _tests_eval_and_output_to_fd ${output} ${output} "${@}"
+
+    exec {output}<&-
 }
 
 # @description Same, as `tests:pipe`, but produce unbuffered result.
@@ -543,21 +546,24 @@ tests:eval() {
 # @arg $@ string String to evaluate.
 # @see tests:eval
 tests:runtime() {
-    _tests_buffering="stdbuf -e0 -i0 -o0 "
+    local stdout
+    local stderr
 
     _tests_prepare_eval_namespace eval
 
-    exec {output}>$_tests_run_output
+    exec {stdout}>$_tests_run_output
+    exec {stderr}>$_tests_run_output
 
     # because of pipe, environment variables will not bubble out of
     # _tests_eval_and_output_to_fd call
     _tests_prepare_eval_namespace eval
 
-    { { _tests_eval_and_output_to_fd ${output} ${output} "${@}" \
-        {output}>&1 | _tests_indent 'runtime stdout' ; } \
-        {output}>&1 | _tests_indent 'runtime stderr' ; }
+    { { _tests_eval_and_output_to_fd ${stdout} ${stderr} "${@}" \
+        {stdout}>&1 | _tests_indent 'runtime stdout' ; } \
+        {stderr}>&1 | _tests_indent 'runtime stderr' ; }
 
-    _tests_buffering=""
+    exec {stdout}<&-
+    exec {stderr}<&-
 }
 
 # @description Same, as `tests:eval`, but return stdout and stderr
@@ -570,12 +576,18 @@ tests:runtime() {
 # @arg $@ string String to evaluate.
 # @see tests:eval
 tests:pipe() {
+    local stdout
+    local stderr
+
     _tests_prepare_eval_namespace eval
 
     exec {stdout}>&1
     exec {stderr}>&2
 
     _tests_eval_and_output_to_fd ${stdout} ${stderr} "${@}"
+
+    exec {stdout}<&-
+    exec {stderr}<&-
 }
 
 # @description Same, as `tests:eval`, but writes stdout into given variable and
@@ -656,14 +668,12 @@ tests:run-background() {
     local _id="$1"
     shift
 
-    {
-        local old_prefix=$_tests_debug_prefix
-        _tests_debug_prefix="[BG] <$BASHPID>  "
+    local old_prefix=$_tests_debug_prefix
+    _tests_debug_prefix="[BG] <$BASHPID>  "
 
-        coproc:run-immediately "$_id" "${@}"
+    coproc:run-immediately "$_id" "${@}"
 
-        _tests_debug_prefix=$old_prefix
-    }
+    _tests_debug_prefix=$old_prefix
 
     eval local id=\$$_id
 
@@ -683,30 +693,6 @@ tests:run-background() {
 
     _tests_run_bg_reader $stdout $_tests_dir/.bg/$pid/stdout "<$pid> stdout"
     _tests_run_bg_reader $stderr $_tests_dir/.bg/$pid/stderr "<$pid> stderr"
-
-    #local cmd=("${@}")
-
-    #_tests_prepare_eval_namespace bg
-
-    #local identifier=$(cat $_tests_run_id)
-    #local run_mode="&"
-    #if [ $_tests_verbose -gt 6 ]; then
-    #    tests:debug "{DEBUG} [BG] #$identifier: TASK WILL RUN IN FOREGROUND"
-    #    run_mode=""
-    #fi
-
-    #tests:debug "{START} [BG] #$identifier: ! at '$_tests_run_namespace'"
-    #tests:debug "{START} [BG] #$identifier: evaluating command:"
-
-    #_tests_pipe tests:colorize fg 5 _tests_indent '$' <<< "${cmd[@]}"
-
-    #builtin eval "( _tests_run_bg_task $identifier cmd )" $run_mode
-
-    #builtin eval $identifier_var=\$identifier
-
-    #while [ "$(cat $_tests_run_pidfile)" = "" ]; do
-    #    :
-    #done
 }
 
 _tests_run_bg_reader() {
@@ -714,7 +700,6 @@ _tests_run_bg_reader() {
     local output=$2
     local prefix=$3
 
-    #_tests_debug_prefix="[BG] pid:<$BASHPID> #$identifier: "
     ( cat <&$input_fd | tee $output | _tests_indent "$prefix" ) &
 }
 
@@ -968,7 +953,7 @@ _tests_pipe() {
 _tests_raw_eval() {
     printf $BASHPID > $_tests_run_pidfile
 
-    builtin eval $_tests_buffering "$(_tests_escape_cmd "${@}")"
+    builtin eval "$(_tests_escape_cmd "${@}")"
 }
 
 _tests_get_debug_fd() {
@@ -987,34 +972,35 @@ _tests_indent() {
         prefix=""
     fi
 
-    sed -u \
-        -e "s/^/    ${prefix:+"($prefix) "}/" \
-        -e '1i\ ' \
-        -e '$a\ ' | \
-            sed -u -e "s/^/$_tests_debug_prefix/" \
-        >&${output}
-}
+    local empty="${2:-}"
 
-_tests_check_empty() {
-    local output=$(_tests_get_debug_fd)
+    _tests_unbuffer awk \
+        -v "prefix=$_tests_debug_prefix    ${prefix:+($prefix) }" \
+        -v "empty=$empty" '
+        BEGIN {
+            if (empty) {
+                empty = "    " empty
+            }
+        }
 
-    local first_byte
-    local empty=false
+        {
+            if (NR == 1) {
+                print ""
+            }
 
-    if ! first_byte=$(dd bs=1 count=1 2>/dev/null | od -to1 -An); then
-        empty=true
-    fi
+            print prefix $0
+            empty = ""
+        }
 
-    if [ -z "$first_byte" ]; then
-        empty=true
-    fi
+        END {
+            if (NR == 0 && empty) {
+                print "\n" empty "\n"
+            }
 
-    if $empty; then
-        _tests_pipe _tests_indent <<< "<empty>"
-    else
-        printf "\\${first_byte# }"
-        _tests_unbuffer cat
-    fi >&${output}
+            if (NR > 0) {
+                print ""
+            }
+        }' >&${output}
 }
 
 _tests_quote_re() {
@@ -1223,10 +1209,16 @@ _tests_run_raw() {
             fi
         fi
 
-        builtin source "$testcase_file"
+        local exit_code
+        if source "$testcase_file"; then
+            exit_code=0
+        else
+            exit_code=$?
+        fi
+
         _tests_wait_bg_tasks
 
-        exit $?
+        exit $exit_code
     ) 2>&1 | _tests_indent
 }
 
@@ -1260,9 +1252,7 @@ _tests_prepare_eval_namespace() {
 
     if [ -e "$_tests_run_clean" ]; then
         if [ "$(cat $_tests_run_clean 2>/dev/null)" = "1" ]; then
-            #if [ "$namespace" = "${_tests_run_namespace##*/}" ]; then
-                return
-            #fi
+            return
         fi
     fi
 
@@ -1342,6 +1332,8 @@ _tests_wait_bg_tasks() {
 }
 
 _tests_interrupt() {
+    _tests_wait_bg_tasks
+
     exit 88
 }
 
@@ -1450,26 +1442,23 @@ _tests_eval_and_output_to_fd() {
         else
             echo $? > $_tests_run_exitcode
         fi < <(tee >(cat >&${stdin_debug}) < $input) 1>&${stdout} 2>&${stderr}
-
     } | _tests_pipe _tests_indent 'stdin' \
         | _tests_unbuffer tail -n+2 \
         | _tests_unbuffer head -n-1 \
         >&${_tests_debug_fd}
 
-    echo >&$_tests_debug_fd
+    printf "\n" >&$_tests_debug_fd
 
     if [ $_tests_verbose -gt 1 ]; then
         tests:debug "evaluation stdout:"
-        _tests_pipe tests:colorize fg 107 _tests_indent 'stdout' \
-            < $_tests_run_stdout \
-            | _tests_check_empty
+        tests:colorize fg 107 _tests_indent 'stdout' '<empty>' \
+            < $_tests_run_stdout
     fi
 
     if [ $_tests_verbose -gt 1 ]; then
         tests:debug "evaluation stderr:"
-        _tests_pipe tests:colorize fg 61 _tests_indent 'stderr' \
-            < $_tests_run_stderr \
-            | _tests_check_empty
+        tests:colorize fg 61 _tests_indent 'stderr' '<empty>'\
+            < $_tests_run_stderr
     fi
 }
 
@@ -1607,8 +1596,6 @@ EOF
     _tests_bg_channels=""
 
     _tests_debug_prefix=""
-
-    _tests_buffering=""
 
     _tests_base_dir=$(pwd)
 
