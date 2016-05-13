@@ -627,7 +627,7 @@ tests:make-tmp-dir() {
 
     local stderr
     if ! stderr=$(
-        /bin/mkdir \
+        /bin/mkdir -p \
             $(sed -re "s#(^|\\s)([^-])#\\1$_tests_dir_root/\\2#g" <<< "${@}")); then
         tests:debug "error making directories ${@}:"
         _tests_indent 'error' <<< "$stderr"
