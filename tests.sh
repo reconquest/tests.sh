@@ -566,6 +566,28 @@ tests:pipe() {
     _tests_eval_and_output_to_fd ${stdout} ${stderr} "${@}"
 }
 
+# @description Same, as `tests:eval`, but writes stdout into given variable and
+# return stderr as expected.
+#
+# @example
+#   _x() {
+#       echo "y [$@]"
+#   }
+#   tests:value response _x a b c
+#   tests:assert-equals "$response" "y [a b c]"
+#
+# @arg $1 string Variable name.
+# @arg $@ string String to evaluate.
+# @see tests:eval
+tests:value() {
+    local _variable="$1"
+    shift
+
+    local _value=$(tests:pipe "${@}")
+    eval $_variable=\$_value
+
+}
+
 # @description Eval specified command and assert, that it has zero exitcode.
 #
 # @example
