@@ -58,17 +58,23 @@ coproc:wait() {
     local stdout
     local stderr
 
+    local pid
+    coproc:get-pid "$self" pid
 
+
+    exec {stdin}<>$self/stdin.pipe
     exec {stdout}<>$self/stdout.pipe
     exec {stderr}<>$self/stderr.pipe
 
-    if [ -e "$self/done" ]; then
-        cat "$self/done" >$self/exit-code
-        rm "$self/done"
-    fi
+    while pstree -lp "$pid" | grep -oqP '\(\d+\)'; do
+        :
+    done
 
+    exec {stdin}<&-
     exec {stdout}<&-
     exec {stderr}<&-
+
+    return $(cat "$self/done")
 }
 
 # @description Gets stdout FD linked to stdout of running coprocess.
@@ -158,20 +164,8 @@ coproc:stop() {
         main_pid=$(cat $self/pid)
     done
 
-    local killed
-    while [ ! "${killed:-}" ]; do
-        if [ ! -e "$self/done" ]; then
-            killed="yes"
-        fi
-
-        local pids=$(_coproc_get_job_child_pids "$main_pid")
-        local children=($pids)
-
-        if [ "${#children[@]}" = "0" ]; then
-            continue
-        fi
-
-        _coproc_kill_children "kill" "${children[@]}"
+    while pstree -lp "$pid" | grep -oqP '\(\d+\)'; do
+        _coproc_kill "pkill -P" "$main_pid"
     done
 
     _coproc_kill_watchdog "$wait_pid" &
@@ -218,18 +212,18 @@ _coproc_eval() {
     printf "$exit_code" >$self/done
 }
 
-_coproc_kill_children() {
+_coproc_kill() {
     local kill_command=$1
-    shift
+    local pid=$2
 
-    local children=(${@})
     local kill_output
 
-    kill_output="$(command $kill_command "${children[@]}" 2>&1)" || true
+    kill_output="$(command $kill_command "$pid" 2>&1)" || true
+    printf 'XXXXXX coproc.bash:234: $kill_output: %q\n' $kill_output >&2 >>/tmp/debug
     if grep -qF "not permitted" <<< "$kill_output"; then
-        _coproc_kill_children "sudo kill" "${children[@]}"
+        _coproc_kill "sudo "$kill_command "$pid"
     else
-        _coproc_kill_watchdog "${children[@]}" &
+        _coproc_kill_watchdog $kill_command "$pid" &
 
         wait $!
     fi
@@ -237,12 +231,10 @@ _coproc_kill_children() {
 
 _coproc_kill_watchdog() {
     local kill_command=$1
-    shift
-
-    local children=${@}
+    local pid=$1
 
     sleep 0.1
-    command $kill_command -9 "${children[@]}" &>/dev/null || true
+    command $kill_command "$pid" -9 &>/dev/null || true
 }
 
 _coproc_get_job_child_pids() {
@@ -267,7 +259,6 @@ _coproc_create_channels() {
     mkfifo "$self/stdin.pipe"
     mkfifo "$self/stdout.pipe"
     mkfifo "$self/stderr.pipe"
-    mkfifo "$self/done"
 
     printf "%s" $self
 }
