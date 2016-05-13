@@ -1,7 +1,5 @@
 #!/bin/bash
 
-set -euo pipefail
-
 _base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 source $_base_dir/vendor/github.com/reconquest/coproc.v41e642/coproc.bash
 
@@ -566,6 +564,28 @@ tests:pipe() {
     exec {stderr}>&2
 
     _tests_eval_and_output_to_fd ${stdout} ${stderr} "${@}"
+}
+
+# @description Same, as `tests:eval`, but writes stdout into given variable and
+# return stderr as expected.
+#
+# @example
+#   _x() {
+#       echo "y [$@]"
+#   }
+#   tests:value response _x a b c
+#   tests:assert-equals "$response" "y [a b c]"
+#
+# @arg $1 string Variable name.
+# @arg $@ string String to evaluate.
+# @see tests:eval
+tests:value() {
+    local _variable="$1"
+    shift
+
+    local _value=$(tests:pipe "${@}")
+    eval $_variable=\$_value
+
 }
 
 # @description Eval specified command and assert, that it has zero exitcode.
@@ -1362,6 +1382,10 @@ _tests_unbuffer() {
     stdbuf -o0 -i0 -e0 "${@}"
 }
 
+_tests_set_options() {
+    set -euo pipefail
+}
+
 _tests_eval_and_output_to_fd() {
     local stdout=$1
     local stderr=$2
@@ -1432,7 +1456,7 @@ _tests_eval_and_output_to_fd() {
 
 _tests_eval_and_capture_output() {
     (
-        set +euo pipefail
+        _tests_set_options
 
         case $_tests_verbose in
             0|1)
@@ -1576,6 +1600,8 @@ EOF
 
 
 tests:main() {
+    _tests_set_options
+
     local testcases_dir="."
     local testcases_setup=""
     local see_subdirs=false
