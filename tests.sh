@@ -1,7 +1,7 @@
 #!/bin/bash
 
 _base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
-source $_base_dir/vendor/github.com/reconquest/coproc.v41e642/coproc.bash
+source $_base_dir/vendor/github.com/reconquest/coproc/coproc.bash
 
 # Public API Functions {{{
 
