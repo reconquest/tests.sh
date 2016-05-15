@@ -165,7 +165,7 @@ coproc:stop() {
 
     while _coproc_is_task_exists "$main_pid"; do
         if ! _coproc_is_task_suspended "$main_pid"; then
-            _coproc_kill "kill -STOP" "$pid"
+            _coproc_kill "kill -STOP" "$main_pid"
             continue
         fi
 
