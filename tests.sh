@@ -779,16 +779,22 @@ tests:wait-file-changes() {
 
     shift 3
 
-    local command="${@}"
-
     local stat_initial=$(stat $file)
     local sleep_iter=0
     local sleep_iter_max=$(bc <<< "$sleep_max/$sleep_interval")
 
-    tests:debug "! waiting file changes after command: file '$file' (${sleep_max}sec max)"
+    tests:debug "! waiting file changes after command:" \
+        "file '$file' (${sleep_max}sec max)"
+
 
     if [ $# -gt 0 ]; then
-        "${command[@]}"
+        if [ $_tests_verbose -gt 3 ]; then
+            _tests_escape_cmd "$@" \
+                | _tests_pipe tests:colorize fg 5 _tests_indent 'eval' \
+                >&$_tests_debug_fd
+        fi
+
+        _tests_pipe "$@"
     fi
 
     while true; do
