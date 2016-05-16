@@ -709,7 +709,7 @@ _tests_run_bg_reader() {
 #
 # @stdout Pid of background process.
 tests:get-background-pid() {
-    cat "$_tests_dir/.ns/bg/$1/pid"
+    cat "$1/pid"
 }
 
 # @description Returns stdout of specified background process.
@@ -718,7 +718,7 @@ tests:get-background-pid() {
 #
 # @stdout Stdout from background process.
 tests:get-background-stdout() {
-    echo "$_tests_dir/.ns/bg/$1/stdout"
+    echo "$1/stdout"
 }
 
 # @description Returns stderr of specified background process.
@@ -726,8 +726,8 @@ tests:get-background-stdout() {
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 #
 # @stdout Stderr from background process.
-tests:background-stderr() {
-    echo "$_tests_dir/.ns/bg/$1/stderr"
+tests:get-background-stderr() {
+    echo "$1/stderr"
 }
 
 # @description Stops background process with 'kill -9'.
