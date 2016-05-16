@@ -18,7 +18,7 @@ coproc:run() {
     local _id_var=$1
     shift
 
-    self=$(_coproc_create_channels)
+    self=$(_coproc_bootstrap)
 
     builtin eval $_id_var=\$self
 
@@ -270,8 +270,11 @@ _coproc_duplicate_pipe_to_fd() {
     builtin eval "exec {$_fd_var}$pipe"
 }
 
-_coproc_create_channels() {
+_coproc_bootstrap() {
     local self=$(mktemp -d -t coproc.XXXXXXXX)
+
+    touch "$self/stdout"
+    touch "$self/stderr"
 
     mkfifo "$self/stdin.pipe"
     mkfifo "$self/stdout.pipe"
@@ -280,6 +283,7 @@ _coproc_create_channels() {
     printf "%s" $self
 }
 
+#TODO: why it's unused?
 _coproc_remove_channels() {
     local self=$1
 
