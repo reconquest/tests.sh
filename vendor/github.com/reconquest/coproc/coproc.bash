@@ -72,8 +72,6 @@ coproc:wait() {
     exec {stdin}<&-
     exec {stdout}<&-
     exec {stderr}<&-
-
-    return $(cat "$self/done" || coproc:get-killed-code)
 }
 
 # @description Gets stdout FD linked to stdout of running coprocess.
@@ -194,34 +192,14 @@ coproc:get-killed-code() {
 
 _coproc_job() {
     local self="$1"
+    shift
 
-    _coproc_eval "${@}" \
+    builtin eval "${@}" \
         <$self/stdin.pipe \
         >$self/stdout.pipe \
         2>$self/stderr.pipe &
 
     printf "$!" >$self/pid
-}
-
-_coproc_eval() {
-    local self=$1
-    shift
-
-    trap "coproc:get-killed-code >$self/done" ERR
-
-    local exit_code
-
-    if builtin eval "${@}"; then
-        exit_code=0
-    else
-        exit_code=$?
-    fi
-
-    exec 0<&-
-    exec 1<&-
-    exec 2<&-
-
-    printf "$exit_code" >$self/done
 }
 
 _coproc_kill() {
