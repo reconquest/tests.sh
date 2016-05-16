@@ -941,6 +941,9 @@ _tests_escape_cmd() {
                 '>&'[[:digit:]]) cmd+=($i) ;;
                 '<&'[[:digit:]]) cmd+=($i) ;;
 
+                [[:digit:]]'>&'[[:digit:]]) cmd+=($i) ;;
+                [[:digit:]]'<&'[[:digit:]]) cmd+=($i) ;;
+
                 *) cmd+=("$(_tests_quote_cmd <<< "$i")")
             esac
         done
