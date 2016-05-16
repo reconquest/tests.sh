@@ -251,11 +251,22 @@ tests:get-stderr-file() {
 #
 # @example
 #   tests:eval exit 220
-#   cat $(tests:get-exitcode) # will echo 220
+#   cat $(tests:get-exitcode-file) # will echo 220
 #
 # @stdout Filename containing exitcode.
 tests:get-exitcode-file() {
     echo $_tests_run_exitcode
+}
+
+# @description Returns exitcode of last command.
+#
+# @example
+#   tests:eval exit 220
+#   tests:get-exitcode # will echo 220
+#
+# @stdout Filename containing exitcode.
+tests:get-exitcode() {
+    cat $_tests_run_exitcode
 }
 
 # @description Same as 'tests:assert-diff', but ignore changes whose lines are
@@ -485,9 +496,15 @@ tests:debug() {
 #
 # @arg $1 directory Directory to change to.
 tests:cd() {
-    local dir=$1
-    tests:debug "\$ cd $1"
-    builtin cd $1
+    local dir=${1:-$(tests:get-tmp-dir)}
+    tests:debug "\$ cd $dir"
+    if [[ ! -d "$dir" ]]; then
+        tests:debug "error changing working directory to $dir:"
+        _tests_indent 'error' <<< "$(readlink -fm $dir) not found"
+        _tests_interrupt
+    else
+        builtin cd $dir
+    fi
 }
 
 # @description Evaluates specified string via shell 'eval'.
@@ -656,11 +673,11 @@ tests:make-tmp-dir() {
 }
 
 # @description Changes working directory to the specified temporary directory,
-# previously created by 'tests:mkdir'.
+# previously created by 'tests:make-tmp-dir'.
 #
 # @arg $1 string Directory name.
 tests:cd-tmp-dir() {
-    tests:cd $_tests_dir/$1
+    tests:cd $_tests_dir_root/$1
 }
 
 # @description Runs any command in background, this is very useful if you test
