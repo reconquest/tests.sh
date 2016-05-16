@@ -706,6 +706,7 @@ tests:run-background() {
     command mkdir $_tests_dir/.bg/$pid
     ln -s "$id" $_tests_dir/.bg/$pid/coproc
 
+    builtin eval $_id=\$_tests_dir/.bg/\$pid
 
     tests:debug "! running coprocess with pid <$pid>:"
     _tests_indent "coproc" <<< "${@}"
@@ -734,7 +735,9 @@ _tests_run_bg_reader() {
 #
 # @stdout Pid of background process.
 tests:get-background-pid() {
-    cat "$1/pid"
+    local _pid=""
+    coproc:get-pid "$(readlink -f "$1/coproc")" _pid
+    echo $_pid
 }
 
 # @description Returns stdout of specified background process.
