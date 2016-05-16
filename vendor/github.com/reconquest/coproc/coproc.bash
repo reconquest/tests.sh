@@ -194,7 +194,7 @@ _coproc_job() {
     local self="$1"
     shift
 
-    builtin eval "${@}" \
+    "${@}" \
         <$self/stdin.pipe \
         >$self/stdout.pipe \
         2>$self/stderr.pipe &
