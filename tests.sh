@@ -411,6 +411,11 @@ tests:assert-exitcode() {
     local expected=$1
     shift
 
+    if [[ "$actual" = 88 && $_tests_failed ]]; then
+        _tests_interrupt
+        return
+    fi
+
     _tests_make_assertion "$expected" "$actual" \
         "command exited with code" \
         "actual exit code = $actual" \
@@ -438,6 +443,14 @@ tests:not() {
     "${@}"
 
     _tests_assert_operation="="
+}
+
+# @description Output message and fail current testcase immideately.
+#
+# @arg $@ any String to output.
+tests:fail() {
+    tests:describe "$@"
+    _tests_interrupt
 }
 
 # @description Same as tests:debug(), but colorize output
@@ -1333,7 +1346,7 @@ _tests_wait_bg_tasks() {
 
 _tests_interrupt() {
     _tests_wait_bg_tasks
-
+    _tests_failed=true
     exit 88
 }
 
@@ -1598,6 +1611,8 @@ EOF
     _tests_debug_prefix=""
 
     _tests_base_dir=$(pwd)
+
+    _tests_failed=false
 
     # }}}
 }
