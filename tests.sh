@@ -690,35 +690,38 @@ tests:cd-tmp-dir() {
 # @arg $1 variable Name of variable to store BG process ID.
 # @arg $@ string Command to start.
 tests:run-background() {
-    local _id="$1"
+    local _run_id_var="$1"
     shift
 
-    local old_prefix=$_tests_debug_prefix
+    local _run_debug_old_prefix=$_tests_debug_prefix
     _tests_debug_prefix="[BG] <$BASHPID>  "
 
-    coproc:run-immediately "$_id" "${@}"
+    local _run_coproc=""
+    local _run_pid=""
 
-    _tests_debug_prefix=$old_prefix
+    coproc:run-immediately _run_coproc "${@}"
 
-    eval local id=\$$_id
+    _tests_debug_prefix=$_run_debug_old_prefix
 
-    coproc:get-pid "$id" pid
-    command mkdir $_tests_dir/.bg/$pid
-    ln -s "$id" $_tests_dir/.bg/$pid/coproc
+    coproc:get-pid "$_run_coproc" _run_pid
+    command mkdir $_tests_dir/.bg/$_run_pid
+    ln -s "$_run_coproc" $_tests_dir/.bg/$_run_pid/coproc
 
-    builtin eval $_id=\$_tests_dir/.bg/\$pid
+    builtin eval $_run_id_var=\$_tests_dir/.bg/\$_run_pid
 
-    tests:debug "! running coprocess with pid <$pid>:"
+    tests:debug "! running coprocess with pid <$_run_pid>:"
     _tests_indent "coproc" <<< "${@}"
 
-    local stdout
-    local stderr
+    local _run_stdout=""
+    local _run_stderr=""
 
-    coproc:get-stdout-fd "$id" stdout
-    coproc:get-stderr-fd "$id" stderr
+    coproc:get-stdout-fd "$_run_coproc" _run_stdout
+    coproc:get-stderr-fd "$_run_coproc" _run_stderr
 
-    _tests_run_bg_reader $stdout $_tests_dir/.bg/$pid/stdout "<$pid> stdout"
-    _tests_run_bg_reader $stderr $_tests_dir/.bg/$pid/stderr "<$pid> stderr"
+    _tests_run_bg_reader \
+        $_run_stdout $_tests_dir/.bg/$_run_pid/stdout "<$_run_pid> stdout"
+    _tests_run_bg_reader \
+        $_run_stderr $_tests_dir/.bg/$_run_pid/stderr "<$_run_pid> stderr"
 }
 
 _tests_run_bg_reader() {

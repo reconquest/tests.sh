@@ -40,12 +40,12 @@ coproc:run-immediately() {
 # @arg $1 id Coprocesss ID.
 # @arg $2 var Variable name to store PID.
 coproc:get-pid() {
-    local self=$1
-    local _pid_var=$2
+    local _coproc_self=$1
+    local _coproc_pid_var=$2
 
-    local _pid=$(cat $self/pid)
+    local _coproc_pid=$(cat $_coproc_self/pid)
 
-    eval $_pid_var=\$_pid
+    eval $_coproc_pid_var=\$_coproc_pid
 }
 
 # @description Waits specified coprocess to finish.
