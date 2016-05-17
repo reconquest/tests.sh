@@ -4,7 +4,7 @@ file=\$(tests:get-tmp-dir)/done
 tests:eval touch \$file
 
 run-bg() {
-    tests:run-background id "
+    tests:run-background id eval "
         tests:pipe echo \"pre sleep\"
         tests:eval touch \$file
         watch -n1 : >/dev/null 2>/dev/null

@@ -4,7 +4,7 @@ file=\$(tests:get-tmp-dir)/done
 tests:eval touch \$file
 
 echo_bg_pid() {
-    tests:run-background id "
+    tests:run-background id eval "
         bash -c '
             sudo bash -c \"
                 touch /tmp/123
