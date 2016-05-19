@@ -279,7 +279,7 @@ tests:get-exitcode() {
 #
 # @see tests:diff
 tests:assert-no-diff-blank() {
-    tests:assert-no-diff "$1" "$2" "-B"
+    tests:assert-no-diff "$@" "-B"
 }
 
 # @description Same as shell 'test' function, but asserts, that exit code is
