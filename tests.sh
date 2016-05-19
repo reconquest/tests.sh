@@ -56,7 +56,7 @@ tests:assert-equals() {
     _tests_make_assertion "$expected" "$actual" \
         "two strings equals" \
         ">>> $expected$" \
-        "<<< $actual$"
+        "<<< $actual$\n"
 
     _tests_inc_asserts_count
 }
@@ -220,7 +220,7 @@ tests:assert-no-diff() {
 
     _tests_make_assertion $result 0 \
         "no diff" \
-        "\n$(_tests_pipe _tests_indent 'diff' <<< "$diff")"
+        "\n$(_tests_pipe _tests_indent 'diff' <<< "$diff")\n"
 
     _tests_inc_asserts_count
 }
@@ -425,7 +425,7 @@ tests:assert-exitcode() {
     _tests_make_assertion "$expected" "$actual" \
         "command exited with code" \
         "actual exit code = $actual" \
-        "expected exit code $_tests_last_assert_operation $expected"
+        "expected exit code $_tests_last_assert_operation $expected\n"
 
     _tests_inc_asserts_count
 }
