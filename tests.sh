@@ -761,14 +761,15 @@ tests:get-background-stderr() {
     echo "$1/stderr"
 }
 
-# @description Stops background process with 'kill -9'.
+# @description Stops background process with 'kill -TERM'.
 #
 # @arg $1 string Process ID, returned from 'tests:run-background'.
 tests:stop-background() {
     local bg_proc="$1"
 
-    tests:debug "! stopping coprocess with pid <${bg_proc##*/}>"
+    tests:debug "! terminating coprocess <${bg_proc##*/}>"
     coproc:stop $(readlink -f "$bg_proc/coproc")
+    tests:debug "! coprocess <${bg_proc##*/}> has been terminated"
 }
 
 # @description Waits, until specified file will be changed or timeout passed
