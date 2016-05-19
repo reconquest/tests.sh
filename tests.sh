@@ -163,7 +163,7 @@ tests:assert-re() {
         "regexp matches" \
         ">>> ${regexp:-<empty regexp>}" \
         "<<< contents of ${target}:\n\
-            $(_tests_pipe _tests_indent "$target" < $file)"
+            $(_tests_pipe _tests_indent "$target" "<empty>" < $file)\n"
 
     _tests_inc_asserts_count
 }
