@@ -200,6 +200,8 @@ _coproc_job() {
         2>$self/stderr.pipe &
 
     printf "$!" >$self/pid
+
+    disown
 }
 
 _coproc_kill() {
