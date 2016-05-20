@@ -1693,16 +1693,23 @@ tests:main() {
                 fi
 
                 local filemask=${@:$OPTIND:1}
+                local files=""
                 if [ -z "$filemask" ]; then
-                    local files=$(_tests_get_last)
+                    files=$(_tests_get_last)
+                elif files=$(
+                    _tests_get_testcases "$testcases_dir" true \
+                        | grep -P "$filemask"
+                ); then
+                    files=($files)
                 else
-                    local files=(
-                        $(eval echo \$testcases_dir/\*$filemask\*.test.sh)
-                    )
+                    echo no testcases found.
+                    exit 1
+                    return 1
                 fi
 
                 for name in "${files[@]}"; do
-                    if ! _tests_run_one "$name" "$testcases_setup"; then
+                    local testcase="$testcases_dir/$name"
+                    if ! _tests_run_one "$testcase" "$testcases_setup"; then
                         exit 1
                         return 1
                     fi
