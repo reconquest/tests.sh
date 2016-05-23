@@ -441,7 +441,7 @@ tests:assert-exitcode() {
 #   tests:assert-success
 #   tests:not tests:assert-fail
 #
-# @arg $1 int Expected exit code.
+# @arg $@ any Command to evaluate.
 tests:not() {
     _tests_assert_operation="!="
     _tests_last_assert_operation="!="
@@ -449,6 +449,20 @@ tests:not() {
     "${@}"
 
     _tests_assert_operation="="
+}
+
+# @description Prevets eval command to print stdout/stderr.
+#
+# @example
+#   tests:silence tests:eval rm -r blah
+#
+# @arg $@ any Command to evaluate.
+tests:silence() {
+    _tests_eval_silence="1"
+
+    "${@}"
+
+    _tests_eval_silence=""
 }
 
 # @description Output message and fail current testcase immideately.
@@ -1489,16 +1503,18 @@ _tests_eval_and_output_to_fd() {
 
     printf "\n" >&$_tests_debug_fd
 
-    if [ $_tests_verbose -gt 1 ]; then
-        tests:debug "evaluation stdout:"
-        tests:colorize fg 107 _tests_indent 'stdout' '<empty>' \
-            < $_tests_run_stdout
-    fi
+    if [ -z $_tests_eval_silence ]; then
+        if [ $_tests_verbose -gt 1 ]; then
+            tests:debug "evaluation stdout:"
+            tests:colorize fg 107 _tests_indent 'stdout' '<empty>' \
+                < $_tests_run_stdout
+        fi
 
-    if [ $_tests_verbose -gt 1 ]; then
-        tests:debug "evaluation stderr:"
-        tests:colorize fg 61 _tests_indent 'stderr' '<empty>'\
-            < $_tests_run_stderr
+        if [ $_tests_verbose -gt 1 ]; then
+            tests:debug "evaluation stderr:"
+            tests:colorize fg 61 _tests_indent 'stderr' '<empty>'\
+                < $_tests_run_stderr
+        fi
     fi
 }
 
@@ -1627,6 +1643,9 @@ EOF
 
     # Operation used in assertions (= or !=)
     _tests_assert_operation="="
+
+    # Prevents eval commands to print stdout/stderr.
+    _tests_eval_silence=""
 
     # Last used assert operation.
     _tests_last_assert_operation="="
