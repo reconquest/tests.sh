@@ -216,9 +216,6 @@ tests:assert-no-diff() {
         result=0
     else
         result=$?
-        if which diff-so-fancy &>/dev/null; then
-            diff=$(diff-so-fancy <<< "$diff")
-        fi
     fi
 
     _tests_make_assertion $result 0 \
