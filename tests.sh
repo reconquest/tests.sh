@@ -1276,6 +1276,8 @@ _tests_run_raw() {
 
         _tests_wait_bg_tasks
 
+        builtin cd $_tests_dir_root
+
         if [ -n "$teardown" ]; then
             if [ $_tests_verbose -gt 2 ]; then
                 tests:debug "{BEGIN} TEARDOWN"
