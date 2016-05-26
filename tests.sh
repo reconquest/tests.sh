@@ -1086,8 +1086,9 @@ _tests_get_testcases() {
 # FIXME refactor that shit!
 _tests_run_all() {
     local testcases_dir="$1"
-    local testcase_setup="$2"
-    local recursive=$3
+    local setup="$2"
+    local teardown="$3"
+    local recursive="$4"
 
     local testcases=($(
         _tests_get_testcases "$testcases_dir" $recursive
@@ -1126,7 +1127,7 @@ _tests_run_all() {
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$testcases_dir/$file" "$testcase_setup" \
+            if _tests_run_one "$testcases_dir/$file" "$setup" "$teardown" \
                     >$stdout 2>$stderr;
             then
                 result=0
@@ -1149,7 +1150,7 @@ _tests_run_all() {
             fi
         else
             local result
-            if _tests_run_one "$testcases_dir/$file" "$testcase_setup"; then
+            if _tests_run_one "$testcases_dir/$file" "$setup" "$teardown"; then
                 result=0
             else
                 result=$?
@@ -1197,7 +1198,8 @@ _tests_show_test_output() {
 
 _tests_run_one() {
     local testcase="$1"
-    local testcase_setup="$2"
+    local setup="$2"
+    local teardown="$3"
 
     local testcase_file="$_tests_base_dir/$testcase"
 
@@ -1215,7 +1217,7 @@ _tests_run_one() {
     fi
 
     local result
-    if _tests_run_raw "$testcase_file" "$testcase_setup"; then
+    if _tests_run_raw "$testcase_file" "$setup" "$teardown"; then
         result=0
     else
         result=$?
@@ -1242,19 +1244,20 @@ _tests_run_one() {
 
 _tests_run_raw() {
     local testcase_file="$1"
-    local testcase_setup="$2"
+    local setup="$2"
+    local teardown="$3"
 
     (
         PATH="$_tests_dir_root/bin:$PATH"
 
         builtin cd $_tests_dir_root
 
-        if [ -n "$testcase_setup" ]; then
+        if [ -n "$setup" ]; then
             if [ $_tests_verbose -gt 2 ]; then
                 tests:debug "{BEGIN} SETUP"
             fi
 
-            if ! tests:involve "$testcase_setup"; then
+            if ! tests:involve "$setup"; then
                 exit 1
                 return 1
             fi
@@ -1272,6 +1275,21 @@ _tests_run_raw() {
         fi
 
         _tests_wait_bg_tasks
+
+        if [ -n "$teardown" ]; then
+            if [ $_tests_verbose -gt 2 ]; then
+                tests:debug "{BEGIN} TEARDOWN"
+            fi
+
+            if ! tests:involve "$teardown"; then
+                exit 1
+                return 1
+            fi
+
+            if [ $_tests_verbose -gt 2 ]; then
+                tests:debug "{END} TEARDOWN"
+            fi
+        fi
 
         exit $exit_code
     ) 2>&1 | _tests_indent
@@ -1573,6 +1591,7 @@ Options:
     -O <name>    Run specified testcase only. If no testcase specified, last
                  failed testcase will be ran.
     -s <path>    Run specified setup file before running every testcase.
+    -t <path>    Run specified teardown file after running every testcase.
     -d <dir>     Change directory to specified before running testcases.
                  [default: current working directory].
     -v           Verbosity. Flag can be specified several times.
@@ -1666,12 +1685,13 @@ tests:main() {
     _tests_set_options
 
     local testcases_dir="."
-    local testcases_setup=""
+    local setup=""
+    local teardown=""
     local recursive=false
 
     OPTIND=
 
-    while getopts ":hs:d:va" arg "${@}"; do
+    while getopts ":hs:t:d:va" arg "${@}"; do
         case $arg in
             d)
                 testcases_dir="$OPTARG"
@@ -1688,7 +1708,10 @@ tests:main() {
                 recursive=true
                 ;;
             s)
-                testcases_setup="$OPTARG"
+                setup="$OPTARG"
+                ;;
+            t)
+                teardown="$OPTARG"
                 ;;
             ?)
                 args+=("$OPTARG")
@@ -1697,11 +1720,11 @@ tests:main() {
 
     OPTIND=
 
-    while getopts ":hs:d:vaAO" arg "${@}"; do
+    while getopts ":hs:t:d:vaAO" arg "${@}"; do
         case $arg in
             A)
                 _tests_run_all \
-                    "$testcases_dir" "$testcases_setup" $recursive
+                    "$testcases_dir" "$setup" "$teardown" "$recursive"
 
                 exit $?
                 return $?
@@ -1728,7 +1751,7 @@ tests:main() {
 
                 for name in "${files[@]}"; do
                     local testcase="$testcases_dir/$name"
-                    if ! _tests_run_one "$testcase" "$testcases_setup"; then
+                    if ! _tests_run_one "$testcase" "$setup" "$teardown"; then
                         exit 1
                         return 1
                     fi
