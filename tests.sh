@@ -1068,7 +1068,7 @@ _tests_quote_cmd() {
 
 _tests_get_testcases() {
     local directory="$1"
-    local recursive=$2
+    local recursive="$2"
 
     (
         shopt -s globstar
@@ -1091,7 +1091,7 @@ _tests_run_all() {
     local recursive="$4"
 
     local testcases=($(
-        _tests_get_testcases "$testcases_dir" $recursive
+        _tests_get_testcases "$testcases_dir" "$recursive"
     ))
     if [ "${#testcases[@]}" -eq 0 ]; then
         echo no testcases found.
