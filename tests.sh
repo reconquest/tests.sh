@@ -962,6 +962,18 @@ tests:remove-colors() {
 
     sed -ure "s/$esc\[[^m]+m//g"
 }
+
+tests:init() {
+    _tests_dir="$(mktemp -t -d tests.XXXX)"
+
+    _tests_dir_root=$_tests_dir/root
+
+    command mkdir -p $_tests_dir_root
+    command mkdir -p $_tests_dir_root/bin
+    command mkdir -p $_tests_dir/.bg
+
+    tests:debug "{BEGIN} TEST SESSION AT $_tests_dir"
+}
 # }}}
 
 # Internal Code {{{
@@ -1210,7 +1222,7 @@ _tests_run_one() {
 
     tests:debug "TESTCASE $testcase"
 
-    _tests_init
+    tests:init
 
     if [ ! -s $_tests_dir/.asserts ]; then
         echo 0 > $_tests_dir/.asserts
@@ -1374,18 +1386,6 @@ _tests_set_last() {
 
 _tests_rm_last() {
     rm -f $_tests_base_dir/.last-testcase
-}
-
-_tests_init() {
-    _tests_dir="$(mktemp -t -d tests.XXXX)"
-
-    _tests_dir_root=$_tests_dir/root
-
-    command mkdir -p $_tests_dir_root
-    command mkdir -p $_tests_dir_root/bin
-    command mkdir -p $_tests_dir/.bg
-
-    tests:debug "{BEGIN} TEST SESSION AT $_tests_dir"
 }
 
 _tests_cleanup() {
