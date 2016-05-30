@@ -1130,8 +1130,8 @@ _tests_run_all() {
         _tests_set_last "$file"
 
         if [ $verbose -eq 0 ]; then
-            local stdout="`mktemp -t stdout.XXXX`"
-            local stderr="`mktemp -t stdout.XXXX`"
+            local stdout=$_tests_one_stdout
+            local stderr=$_tests_one_stderr
             local pwd="$(pwd)"
 
             trap "_tests_show_test_output $stdout $stderr $file" EXIT
@@ -1624,6 +1624,9 @@ EOF
 
 {
     # Internal global state {{{
+    _tests_one_stdout=$(mktemp -t stdout.XXXX)
+
+    _tests_one_stderr=$(mktemp -t stderr.XXXX)
 
     # Current test session.
     _tests_dir=""
