@@ -1280,11 +1280,10 @@ _tests_run_raw() {
         fi
 
         local exit_code
-        if source "$testcase_file"; then
-            exit_code=0
-        else
-            exit_code=$?
-        fi
+        (
+            builtin source "$testcase_file"
+        )
+        exit_code=$?
 
         _tests_wait_bg_tasks
 
