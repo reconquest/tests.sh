@@ -1224,6 +1224,10 @@ _tests_run_one() {
 
     tests:init
 
+    tests:print-current-testcase() {
+        printf "%s" "$testcase"
+    }
+
     if [ ! -s $_tests_dir/.asserts ]; then
         echo 0 > $_tests_dir/.asserts
     fi
