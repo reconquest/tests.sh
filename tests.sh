@@ -976,7 +976,7 @@ tests:init() {
 }
 
 tests:progress() {
-    cat > /dev/null
+    cat >/dev/null
 }
 
 # }}}
@@ -1184,7 +1184,7 @@ _tests_run_all() {
         assertions_count=$(($assertions_count+$_tests_asserts))
     done
 
-    tests:progress "stop"
+    tests:progress "stop" < /dev/null
 
     _tests_rm_last
 
