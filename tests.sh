@@ -976,7 +976,7 @@ tests:init() {
 }
 
 tests:progress() {
-    :
+    cat > /dev/null
 }
 
 # }}}
@@ -1145,8 +1145,8 @@ _tests_run_all() {
 
             local result
             if { _tests_run_one "$testcases_dir/$file" "$setup" "$teardown" \
-                    > >(tee $stdout >&3) 2> >(tee $stderr >&3); } 3>&1 \
-                        | tests:progress
+                    > >(tee $stdout >&3) 2> >(tee $stderr >&3); } \
+                    3> >(tests:progress)
             then
                 result=0
             else
