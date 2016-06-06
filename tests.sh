@@ -974,6 +974,11 @@ tests:init() {
 
     tests:debug "{BEGIN} TEST SESSION AT $_tests_dir"
 }
+
+tests:progress() {
+    :
+}
+
 # }}}
 
 # Internal Code {{{
@@ -1139,8 +1144,9 @@ _tests_run_all() {
             _tests_asserts=0
 
             local result
-            if _tests_run_one "$testcases_dir/$file" "$setup" "$teardown" \
-                    >$stdout 2>$stderr;
+            if { _tests_run_one "$testcases_dir/$file" "$setup" "$teardown" \
+                    > >(tee $stdout >&3) 2> >(tee $stderr >&3); } 3>&1 \
+                        | tests:progress
             then
                 result=0
             else
@@ -1177,6 +1183,8 @@ _tests_run_all() {
 
         assertions_count=$(($assertions_count+$_tests_asserts))
     done
+
+    tests:progress "stop"
 
     _tests_rm_last
 
