@@ -355,6 +355,42 @@ tests:put() {
 
 }
 
+# @description Asserts that stdout is empty.
+#
+# @example
+#   tests:eval echo ""
+#
+#   tests:assert-stdout-empty
+#
+# @noargs
+tests:assert-stdout-empty() {
+    tests:assert-empty stdout
+}
+
+# @description Asserts that stderr is empty.
+#
+# @example
+#   tests:eval echo "" '1>&2'
+#
+#   tests:assert-stderr-empty
+#
+# @noargs
+tests:assert-stderr-empty() {
+    tests:assert-empty stderr
+}
+
+# @description Asserts that target is empty.
+#
+# @example
+#   tests:eval echo ""
+#
+#   tests:assert-empty stdout
+#
+# @noargs
+tests:assert-empty() {
+    tests:assert-re "$1" ""
+}
+
 # @description Asserts that stdout of last evaluated command matches given
 # regexp.
 #
