@@ -714,7 +714,7 @@ tests:make-tmp-dir() {
 
     local stderr
     if ! stderr=$(
-        /bin/mkdir -p \
+        command mkdir -p \
             $(sed -re "s#(^|\\s)([^-])#\\1$_tests_dir_root/\\2#g" <<< "${@}")); then
         tests:debug "error making directories ${@}:"
         _tests_indent 'error' <<< "$stderr"
@@ -922,7 +922,7 @@ tests:clone() {
     fi
 
     local stderr
-    if ! stderr=$(/bin/cp -r "${args[@]}" "$dest" 2>&1); then
+    if ! stderr=$(command cp -r "${args[@]}" "$dest" 2>&1); then
         tests:debug "error copying: cp -r ${args[@]} $dest:"
         _tests_indent 'error' <<< "$stderr"
         _tests_interrupt
