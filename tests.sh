@@ -42,6 +42,56 @@ tests:get-tmp-dir() {
     echo "$_tests_dir/root"
 }
 
+tests:wait-file-matches() {
+    local file="$1"
+    local pattern="$2"
+    local sleep_interval="$3"
+    local sleep_max="$4"
+
+    shift 4
+
+    local sleep_iter=0
+    local sleep_iter_max=$(bc <<< "$sleep_max/$sleep_interval")
+
+    tests:debug "! waiting file matches pattern after command:" \
+        "pattern '$pattern', file '$file' (${sleep_max}sec max)"
+
+    while true; do
+        sleep_iter=$(($sleep_iter+1))
+
+        if grep -qE $pattern $file 2>/dev/null; then
+            tests:debug "! matches found for pattern '$(\
+                echo $pattern)' in file '$file' (after $(\
+                bc <<< "$sleep_iter * $sleep_interval" )sec)"
+
+            echo 0 > $_tests_run_exitcode
+            break
+        fi
+
+        if [[ $sleep_iter -ne $sleep_iter_max ]]; then
+            sleep $sleep_interval
+            continue
+        fi
+
+        tests:debug "! no matches found for pattern '$(\
+            echo $pattern)' in file '$file' (after $(\
+            bc <<< "$sleep_iter * $sleep_interval" )sec)"
+
+        echo 1 > $_tests_run_exitcode
+        break
+    done
+}
+
+tests:wait-file-not-matches() {
+    tests:wait-file-matches "${@}"
+
+    if [ $(cat $_tests_run_exitcode) -eq 0 ]; then
+        echo 1 > $_tests_run_exitcode
+    else
+        echo 0 > $_tests_run_exitcode
+    fi
+}
+
 # @description Asserts, that first string arg is equals to second.
 #
 # @example
