@@ -33,7 +33,7 @@ tests:import-namespace() {
 # @example
 #   ls $(tests:get-tmp-dir)
 #
-# @stdout Path to temp dir, e.g, /tmp/tests.XXXX
+# @stdout Path to temp dir, e.g., /tmp/tests.XXXX
 tests:get-tmp-dir() {
     if [ -z "$_tests_dir" ]; then
         tests:debug "test session not initialized"
@@ -43,6 +43,20 @@ tests:get-tmp-dir() {
     echo "$_tests_dir/root"
 }
 
+# @description Suspends testcase execution until file contents matches
+# pattern or timeout is reached.
+#
+# Can be used to check if background-executed command output do not contains
+# any error messages.
+#
+# @example
+#   stderr=$(tests:get-background-stderr $command_id)
+#   tests:wait-file-not-matches "$stderr" "ERROR" 1 2
+#
+# @arg $1 string Path to file.
+# @arg $2 regexp Regexp, same as in `grep -E`.
+# @arg $3 int Interval of time to check changes after.
+# @arg $4 int Timeout in seconds.
 tests:wait-file-matches() {
     local file="$1"
     local pattern="$2"
@@ -60,7 +74,7 @@ tests:wait-file-matches() {
     while true; do
         sleep_iter=$(($sleep_iter+1))
 
-        if grep -qE $pattern $file 2>/dev/null; then
+        if grep -qE "$pattern" $file 2>/dev/null; then
             tests:debug "! matches found for pattern '$(\
                 echo $pattern)' in file '$file' (after $(\
                 bc <<< "$sleep_iter * $sleep_interval" )sec)"
@@ -69,7 +83,7 @@ tests:wait-file-matches() {
             break
         fi
 
-        if [[ $sleep_iter -ne $sleep_iter_max ]]; then
+        if [[ $sleep_iter -le $sleep_iter_max ]]; then
             sleep $sleep_interval
             continue
         fi
