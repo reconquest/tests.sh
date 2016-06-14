@@ -1194,9 +1194,9 @@ _tests_get_testcases() {
         builtin cd $directory
 
         if $recursive; then
-            ls -t **/*.test.sh
+            ls -t -- **/*.test.sh
         else
-            ls -t *.test.sh
+            ls -t -- *.test.sh
         fi
     )
 }
