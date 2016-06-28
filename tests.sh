@@ -65,6 +65,10 @@ tests:wait-file-matches() {
 
     shift 4
 
+    if [ ! "$_tests_run_exitcode" ]; then
+        _tests_prepare_eval_namespace wait-for-matches
+    fi
+
     local sleep_iter=0
     local sleep_iter_max=$(bc <<< "$sleep_max/$sleep_interval")
 
