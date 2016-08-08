@@ -316,6 +316,28 @@ tests:get-stderr-file() {
     echo $_tests_run_stderr
 }
 
+# @description Returns contents of the stdout of last command.
+#
+# @example
+#   tests:eval echo 123
+#   tests:get-stdout # will echo 123
+#
+# @stdout Stdout for last command.
+tests:get-stdout() {
+    cat "$(tests:get-stdout-file)"
+}
+
+# @description Returns contents of the stderr of last command.
+#
+# @example
+#   tests:eval echo 123 '>&2'
+#   tests:get-stderr # will echo 123
+#
+# @stdout Stderr for last command.
+tests:get-stderr() {
+    cat "$(tests:get-stderr-file)"
+}
+
 # @description Returns file containing exitcode of last command.
 #
 # @example
