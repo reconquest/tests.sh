@@ -1,3 +1,6 @@
 [submodule "vendor/github.com/reconquest/shdoc"]
 	path = vendor/github.com/reconquest/shdoc
 	url = https://github.com/reconquest/shdoc
+[submodule "vendor/github.com/reconquest/coproc.bash"]
+	path = vendor/github.com/reconquest/coproc.bash
+	url = https://github.com/reconquest/coproc.bash
