@@ -2,7 +2,7 @@
 
 _base_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
 source $_base_dir/vendor/github.com/reconquest/coproc/coproc.bash \
-    || import:source "github.com/reconquest/coproc.bash"
+    || import:use "github.com/reconquest/coproc.bash"
 
 # Public API Functions {{{
 
