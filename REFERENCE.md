@@ -1,4 +1,3 @@
-
 * [tests:import-namespace()](#testsimport-namespace)
 * [tests:get-tmp-dir()](#testsget-tmp-dir)
 * [tests:wait-file-matches()](#testswait-file-matches)
@@ -35,7 +34,6 @@
 * [tests:eval()](#testseval)
 * [tests:runtime()](#testsruntime)
 * [tests:pipe()](#testspipe)
-* [_x()](#x)
 * [tests:value()](#testsvalue)
 * [tests:ensure()](#testsensure)
 * [tests:make-tmp-dir()](#testsmake-tmp-dir)
@@ -51,7 +49,6 @@
 * [tests:clone()](#testsclone)
 * [tests:involve()](#testsinvolve)
 * [tests:require()](#testsrequire)
-
 
 ## tests:import-namespace()
 
@@ -634,7 +631,7 @@ tests:assert-equals $lines 1
 
 * [tests:eval](#tests:eval)
 
-## _x()
+## tests:value()
 
 Same, as `tests:eval`, but writes stdout into given variable and
 return stderr as expected.
@@ -643,8 +640,6 @@ return stderr as expected.
 
 ```bash
 _x() {
-## tests:value()
-
     echo "y [$@]"
 }
 tests:value response _x a b c
